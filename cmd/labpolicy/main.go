@@ -1,11 +1,8 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"log"
-	"os"
-	"path/filepath"
 
 	"github.com/pmarkun/teendns/internal/config"
 	"github.com/pmarkun/teendns/internal/policy"
@@ -52,27 +49,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	contents, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		log.Fatal(err)
-	}
-	contents = append(contents, '\n')
-	temporary, err := os.CreateTemp(filepath.Dir(*path), "gateway-*.json")
-	if err != nil {
-		log.Fatal(err)
-	}
-	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
-	if _, err := temporary.Write(contents); err != nil {
-		log.Fatal(err)
-	}
-	if err := temporary.Close(); err != nil {
-		log.Fatal(err)
-	}
-	if err := os.Chmod(temporaryPath, 0o644); err != nil {
-		log.Fatal(err)
-	}
-	if err := os.Rename(temporaryPath, *path); err != nil {
+	if err := config.WriteAtomic(*path, cfg, 0o644); err != nil {
 		log.Fatal(err)
 	}
 }

@@ -15,6 +15,7 @@ O ambiente Nix fornece Go e as ferramentas de desenvolvimento. Os containers nã
 ```bash
 ./scripts/lab-up.sh
 ./scripts/lab-test.sh
+./scripts/lab-load-test.sh
 ```
 
 Encerrar:
@@ -51,6 +52,17 @@ O teste verifica:
 3. permissão do mesmo domínio para Bia;
 4. precedência da exceção `school.blocked.test` para Ana;
 5. TTL de respostas permitidas limitado a 300 segundos.
+6. duas respostas de perfis distintos atendidas por uma única consulta upstream em cache;
+7. recarga atômica de política por `SIGHUP`, sem reiniciar o processo;
+8. 50 perfis sintéticos, burst com 100 trabalhadores e carga sustentada de 50 consultas/s.
+
+Por padrão, a fase sustentada do ensaio de carga dura dez segundos. Para executar a meta completa do plano:
+
+```bash
+LOAD_DURATION=10m ./scripts/lab-load-test.sh
+```
+
+O ensaio imprime throughput e latência p95. A carga usa conexões TLS reais, o mesmo IP do gateway e um hostname SNI diferente para cada perfil sintético.
 
 Os eventos aparecem em JSON nos logs do gateway:
 
@@ -59,3 +71,9 @@ docker compose logs gateway
 ```
 
 Cada evento contém perfil, domínio, tipo de consulta, ação e versão da política. Não contém URL, caminho, título ou conteúdo.
+
+## Recarga de políticas
+
+O gateway mantém um snapshot imutável das políticas em memória. Ao receber `SIGHUP`, valida a configuração completa e troca o snapshot de forma atômica. Se a nova configuração for inválida, mantém a última versão válida.
+
+No laboratório, `lab-up.sh` copia a configuração base para `.local/gateway.json`. Os testes alteram somente essa cópia ignorada pelo Git.
