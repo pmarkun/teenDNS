@@ -162,10 +162,31 @@ func (s *Server) resolve(profile policy.Profile, request *dns.Msg) *dns.Msg {
 		response = new(dns.Msg)
 		response.SetRcode(request, dns.RcodeServerFailure)
 	} else {
+		if aliasDecision, blocked := blockedAlias(profile, response); blocked {
+			event.Action = aliasDecision.Action
+			event.Category = aliasDecision.Category
+			event.PolicyVersion = aliasDecision.PolicyVersion
+			s.events.Write(event)
+			return blockedResponse(request)
+		}
 		capTTL(response, s.maxTTL)
 	}
 	s.events.Write(event)
 	return response
+}
+
+func blockedAlias(profile policy.Profile, message *dns.Msg) (policy.Decision, bool) {
+	for _, record := range message.Answer {
+		alias, ok := record.(*dns.CNAME)
+		if !ok {
+			continue
+		}
+		decision, err := policy.Decide(profile, alias.Target)
+		if err == nil && decision.Action == policy.ActionBlock {
+			return decision, true
+		}
+	}
+	return policy.Decision{}, false
 }
 
 func blockedResponse(request *dns.Msg) *dns.Msg {

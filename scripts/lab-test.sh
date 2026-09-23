@@ -35,6 +35,16 @@ nix develop --command go run ./cmd/dnscheck \
   -query school.blocked.test \
   -want-ip 192.0.2.40
 
+nix develop --command go run ./cmd/dnscheck \
+  -server-name p-ana.dns.teendns.test \
+  -query alias.test \
+  -want-rcode NXDOMAIN
+
+nix develop --command go run ./cmd/dnscheck \
+  -server-name p-bia.dns.teendns.test \
+  -query alias.test \
+  -want-ip 192.0.2.20
+
 ./scripts/lab-cache-test.sh
 ./scripts/lab-reload-test.sh
 

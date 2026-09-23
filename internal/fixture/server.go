@@ -46,6 +46,14 @@ func (h *handler) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 	h.mu.Lock()
 	h.counts[name]++
 	h.mu.Unlock()
+	if name == "alias.test" && question.Qtype == dns.TypeA {
+		record, err := dns.NewRR("alias.test. 600 IN CNAME blocked.test.")
+		if err == nil {
+			response.Answer = []dns.RR{record}
+		}
+		_ = writer.WriteMsg(response)
+		return
+	}
 	records := map[string]string{
 		"allowed.test":        "192.0.2.10",
 		"blocked.test":        "192.0.2.20",
