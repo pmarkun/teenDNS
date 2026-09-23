@@ -1,0 +1,203 @@
+{
+  "schema_version": "1.0.0",
+  "jurisdiction": "BR",
+  "source": {
+    "title": "Guia Prático de Classificação Indicativa para Audiovisual, Aplicativos e RPG - 5ª edição",
+    "publisher": "Ministério da Justiça e Segurança Pública",
+    "edition_year": 2025,
+    "url": "https://www.gov.br/mj/pt-br/assuntos/seus-direitos/classificacao-1/classind-audio-visual-2025-vs-10-nova-faixa.pdf/view",
+    "retrieved_at": "2026-09-23"
+  },
+  "interpretation": {
+    "rating_is_minimum_age": true,
+    "target_ages": [12, 13],
+    "maximum_compatible_rating": 12,
+    "intervention_from_rating": 14,
+    "notes": [
+      "A classificação final é o maior valor encontrado entre os quatro eixos, depois da análise contextual.",
+      "Os nomes abaixo são critérios oficiais transcritos e normalizados para uso como taxonomia; não são uma lista de domínios.",
+      "A numeração interna aparentemente inconsistente do eixo Sexo e Nudez no PDF foi normalizada conforme a faixa em que cada critério aparece."
+    ]
+  },
+  "bands": [
+    {"code": "L", "minimum_age": 0, "compatible_with_12_13": true},
+    {"code": "6", "minimum_age": 6, "compatible_with_12_13": true},
+    {"code": "10", "minimum_age": 10, "compatible_with_12_13": true},
+    {"code": "12", "minimum_age": 12, "compatible_with_12_13": true},
+    {"code": "14", "minimum_age": 14, "compatible_with_12_13": false},
+    {"code": "16", "minimum_age": 16, "compatible_with_12_13": false},
+    {"code": "18", "minimum_age": 18, "compatible_with_12_13": false}
+  ],
+  "axes": [
+    {
+      "code": "violence",
+      "label": "Violência",
+      "bands": {
+        "L": [
+          {"id": "A.1.1", "label": "Morte sem violência"},
+          {"id": "A.1.2", "label": "Ossada ou esqueleto sem violência"},
+          {"id": "A.1.3", "label": "Representações caricatas ou cômicas de violência"}
+        ],
+        "6": [
+          {"id": "A.2.1", "label": "Apresentação da tristeza de forma ponderada"},
+          {"id": "A.2.2", "label": "Arma sem violência"},
+          {"id": "A.2.3", "label": "Linguagem de baixo teor ofensivo"},
+          {"id": "A.2.4", "label": "Violência fantasiosa"}
+        ],
+        "10": [
+          {"id": "A.3.1", "label": "Angústia"},
+          {"id": "A.3.2", "label": "Ato criminoso ou contravenção sem o uso de violência"},
+          {"id": "A.3.3", "label": "Medo ou tensão leve"},
+          {"id": "A.3.4", "label": "Ossada ou esqueleto com resquício de violência"}
+        ],
+        "12": [
+          {"id": "A.4.1", "label": "Agressão verbal ou linguagem depreciativa"},
+          {"id": "A.4.2", "label": "Arma com violência"},
+          {"id": "A.4.3", "label": "Assédio ou importunação sexual"},
+          {"id": "A.4.4", "label": "Ato violento"},
+          {"id": "A.4.5", "label": "Ato violento contra animal"},
+          {"id": "A.4.6", "label": "Descrição de violência"},
+          {"id": "A.4.7", "label": "Exposição ao perigo"},
+          {"id": "A.4.8", "label": "Exposição de cadáver"},
+          {"id": "A.4.9", "label": "Exposição de pessoa em situação constrangedora ou degradante"},
+          {"id": "A.4.10", "label": "Lesão corporal"},
+          {"id": "A.4.11", "label": "Morte derivada de ato heroico"},
+          {"id": "A.4.12", "label": "Morte natural ou acidental com dor ou violência"},
+          {"id": "A.4.13", "label": "Obscenidade"},
+          {"id": "A.4.14", "label": "Presença de sangue"},
+          {"id": "A.4.15", "label": "Procedimento médico com lesões visíveis"},
+          {"id": "A.4.16", "label": "Sofrimento da vítima"},
+          {"id": "A.4.17", "label": "Violência psicológica"}
+        ],
+        "14": [
+          {"id": "A.5.1", "label": "Aborto"},
+          {"id": "A.5.2", "label": "Autópsia"},
+          {"id": "A.5.3", "label": "Apologia e glamourização do consumo"},
+          {"id": "A.5.4", "label": "Bullying ou cyberbullying"},
+          {"id": "A.5.5", "label": "Estigma ou preconceito"},
+          {"id": "A.5.6", "label": "Eutanásia ou suicídio assistido"},
+          {"id": "A.5.7", "label": "Exploração sexual"},
+          {"id": "A.5.8", "label": "Medo ou tensão intensos"},
+          {"id": "A.5.9", "label": "Morte intencional"},
+          {"id": "A.5.10", "label": "Pena de morte"},
+          {"id": "A.5.11", "label": "Tráfico de pessoas"}
+        ],
+        "16": [
+          {"id": "A.6.1", "label": "Apologia e glamourização de padrões estéticos perigosos"},
+          {"id": "A.6.2", "label": "Crime de ódio"},
+          {"id": "A.6.3", "label": "Estupro ou coação sexual"},
+          {"id": "A.6.4", "label": "Mutilação"},
+          {"id": "A.6.5", "label": "Suicídio"},
+          {"id": "A.6.6", "label": "Tortura"},
+          {"id": "A.6.7", "label": "Violência gratuita ou banalização da violência"},
+          {"id": "A.6.8", "label": "Violência sexual contra crianças ou adolescentes"}
+        ],
+        "18": [
+          {"id": "A.7.1", "label": "Apologia ou glamourização da violência"},
+          {"id": "A.7.2", "label": "Violência de forte impacto"}
+        ]
+      }
+    },
+    {
+      "code": "sex_nudity",
+      "label": "Sexo e nudez",
+      "bands": {
+        "L": [{"id": "B.1.1", "label": "Nudez não erótica"}],
+        "6": [{"id": "B.2.1", "label": "Conteúdo educativo sobre sexualidade"}],
+        "10": [{"id": "B.3.1", "label": "Conteúdo educativo sobre sexo"}],
+        "12": [
+          {"id": "B.4.1", "label": "Apelo sexual"},
+          {"id": "B.4.2", "label": "Carícia sexual"},
+          {"id": "B.4.3", "label": "Insinuação sexual"},
+          {"id": "B.4.4", "label": "Linguagem de conteúdo sexual e/ou chula"},
+          {"id": "B.4.5", "label": "Masturbação"},
+          {"id": "B.4.6", "label": "Nudez velada"},
+          {"id": "B.4.7", "label": "Simulação de sexo"}
+        ],
+        "14": [
+          {"id": "B.5.1", "label": "Erotização"},
+          {"id": "B.5.2", "label": "Nudez"},
+          {"id": "B.5.3", "label": "Prostituição"},
+          {"id": "B.5.4", "label": "Relação sexual"},
+          {"id": "B.5.5", "label": "Vulgaridade"}
+        ],
+        "16": [{"id": "B.6.1", "label": "Relação sexual intensa"}],
+        "18": [
+          {"id": "B.7.1", "label": "Sexo explícito"},
+          {"id": "B.7.2", "label": "Situação sexual complexa ou de forte impacto"}
+        ]
+      }
+    },
+    {
+      "code": "drugs",
+      "label": "Drogas",
+      "bands": {
+        "L": [{"id": "C.1.1", "label": "Consumo regular de medicamentos"}],
+        "6": [{"id": "C.2.1", "label": "Conteúdo educativo sobre prevenção ao uso de droga"}],
+        "10": [
+          {"id": "C.3.1", "label": "Consumo insinuado de droga lícita"},
+          {"id": "C.3.2", "label": "Descrição do consumo de droga lícita"},
+          {"id": "C.3.3", "label": "Uso medicinal de droga ilícita"}
+        ],
+        "12": [
+          {"id": "C.4.1", "label": "Consumo de droga lícita"},
+          {"id": "C.4.2", "label": "Consumo irregular de medicamento"},
+          {"id": "C.4.3", "label": "Discussão sobre o tema drogas ou sua legalização"},
+          {"id": "C.4.4", "label": "Indução ao consumo de droga lícita"},
+          {"id": "C.4.5", "label": "Menção a droga ilícita"}
+        ],
+        "14": [
+          {"id": "C.5.1", "label": "Apologia ao uso de droga lícita"},
+          {"id": "C.5.2", "label": "Consumo insinuado de droga ilícita"},
+          {"id": "C.5.3", "label": "Descrição do consumo ou tráfico de droga ilícita"},
+          {"id": "C.5.4", "label": "Prática de jogos de azar"}
+        ],
+        "16": [
+          {"id": "C.6.1", "label": "Consumo de droga ilícita"},
+          {"id": "C.6.2", "label": "Indução ao consumo de droga ilícita"},
+          {"id": "C.6.3", "label": "Produção ou tráfico de droga ilícita"}
+        ],
+        "18": [
+          {"id": "C.7.1", "label": "Apologia ao uso de droga ilícita"},
+          {"id": "C.7.2", "label": "Estímulo à prática de apostas e jogos de azar"}
+        ]
+      }
+    },
+    {
+      "code": "interactivity",
+      "label": "Interatividade",
+      "bands": {
+        "L": [{"id": "D.1.1", "label": "Recurso educacional essencial e livre de riscos"}],
+        "6": [
+          {"id": "D.2.1", "label": "Modo de interação controlada com inteligência artificial"},
+          {"id": "D.2.2", "label": "Modo de interação restrita e pedagógica"}
+        ],
+        "10": [{"id": "D.3.1", "label": "Inteligência artificial generativa de conteúdo educacional"}],
+        "12": [
+          {"id": "D.4.1", "label": "Comunicação segura entre usuários"},
+          {"id": "D.4.2", "label": "Publicidade ou comunicação mercadológica"}
+        ],
+        "14": [
+          {"id": "D.5.1", "label": "Compras on-line ou troca de produtos"},
+          {"id": "D.5.2", "label": "Comunicação direta sem proteção padrão"},
+          {"id": "D.5.3", "label": "Inteligência artificial generativa de conteúdo amplo"}
+        ],
+        "16": [
+          {"id": "D.6.1", "label": "Compartilhamento de dados"},
+          {"id": "D.6.2", "label": "Compartilhamento de localização"},
+          {"id": "D.6.3", "label": "Curadoria algorítmica com engajamento direcionado"},
+          {"id": "D.6.4", "label": "Filtro de beleza automatizado"},
+          {"id": "D.6.5", "label": "Mecanismos de engajamento contínuo"}
+        ],
+        "18": [
+          {"id": "D.7.1", "label": "Ferramenta de manipulação digital com conteúdo sensível"},
+          {"id": "D.7.2", "label": "Funcionalidade de aposta ou simulação de jogos de azar"},
+          {"id": "D.7.3", "label": "Funcionalidade de interações com potencial de dano"},
+          {"id": "D.7.4", "label": "Interação on-line com intencionalidade de relacionamentos"},
+          {"id": "D.7.5", "label": "Compra de itens virtuais aleatórios (loot box)"},
+          {"id": "D.7.6", "label": "Publicidade e venda de conteúdo adulto"}
+        ]
+      }
+    }
+  ]
+}
