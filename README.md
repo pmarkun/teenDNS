@@ -8,6 +8,8 @@ Documentação técnica:
 - [Estado da execução](docs/status.md)
 - [Laboratório local](docs/laboratorio.md)
 - [Ameaças e limites](docs/ameacas-e-limites.md)
+- [Critérios de classificação etária](docs/criterios-classificacao-etaria.md)
+- [Serviço de classificação de URLs](docs/classifier-service.md)
 
 ## Ideia central
 
