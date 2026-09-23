@@ -45,6 +45,13 @@ nix develop --command go run ./cmd/dnscheck \
   -query alias.test \
   -want-ip 192.0.2.20
 
+if nix develop --command go run ./cmd/dnscheck \
+  -server-name p-unknown.dns.teendns.test \
+  -query allowed.test; then
+  echo "unknown profile endpoint was unexpectedly accepted" >&2
+  exit 1
+fi
+
 ./scripts/lab-cache-test.sh
 ./scripts/lab-reload-test.sh
 
