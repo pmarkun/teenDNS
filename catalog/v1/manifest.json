@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "generated_at": "2026-09-23T20:11:24+00:00",
+  "policy": {
+    "adult-content-regulators.txt": {
+      "category": "adult_content",
+      "default_action": "block",
+      "confidence": "regulator_identified"
+    },
+    "gambling-br-authorized.txt": {
+      "category": "gambling",
+      "default_action": "block",
+      "confidence": "official_register"
+    },
+    "social-platforms.txt": {
+      "category": "social_platform",
+      "default_action": "observe",
+      "confidence": "regulator_identified"
+    },
+    "tracking-observe.txt": {
+      "category": "tracking",
+      "default_action": "observe",
+      "confidence": "community_curated"
+    }
+  },
+  "sources": [
+    {
+      "id": "spa-mf-authorized-betting",
+      "publisher": "Secretaria de Premios e Apostas, Ministerio da Fazenda",
+      "url": "https://www.gov.br/fazenda/pt-br/composicao/orgaos/secretaria-de-premios-e-apostas/transparencia-ativa-processos-de-autorizacao-de-apostas-de-quota-fixa/planilha-de-autorizacoes-1.csv",
+      "retrieved_at": "2026-09-23T20:11:24+00:00",
+      "sha256": "d33a7506fab3903926250175df1cf91f12e48f97ccd28829e771374db7e28b52",
+      "output": "gambling-br-authorized.txt"
+    },
+    {
+      "id": "ofcom-adult-enforcement",
+      "publisher": "Ofcom",
+      "url": "https://www.ofcom.org.uk/online-safety/protecting-children/enforcement-programme-to-protect-children-from-encountering-pornographic-content-through-the-use-of-age-assurance",
+      "retrieved_at": "2026-09-23T20:11:24+00:00",
+      "extraction": "manual from named adult services",
+      "output": "adult-content-regulators.txt"
+    },
+    {
+      "id": "eu-dsa-adult-vlops",
+      "publisher": "European Commission",
+      "url": "https://digital-strategy.ec.europa.eu/en/news/commission-designates-second-set-very-large-online-platforms-under-digital-services-act",
+      "retrieved_at": "2026-09-23T20:11:24+00:00",
+      "extraction": "manual from designated pornographic VLOPs",
+      "output": "adult-content-regulators.txt"
+    },
+    {
+      "id": "ofcom-category-1",
+      "publisher": "Ofcom",
+      "url": "https://www.ofcom.org.uk/online-safety/illegal-and-harmful-content/register-of-categorised-services-and-list-emerging-category-1-services",
+      "retrieved_at": "2026-09-23T20:11:24+00:00",
+      "extraction": "manual canonical-domain mapping",
+      "output": "social-platforms.txt"
+    },
+    {
+      "id": "block-list-project-tracking",
+      "publisher": "The Block List Project",
+      "url": "https://blocklistproject.github.io/Lists/alt-version/tracking-nl.txt",
+      "retrieved_at": "2026-09-23T20:11:24+00:00",
+      "sha256": "09249af65f6ead4bfa04987b23fafaa0ebdbb922eec9eeba8f043074674fe011",
+      "license": "Unlicense; downloaded snapshot header states MIT",
+      "output": "tracking-observe.txt"
+    }
+  ],
+  "counts": {
+    "adult-content-regulators.txt": 92,
+    "gambling-br-authorized.txt": 185,
+    "social-platforms.txt": 12,
+    "tracking-observe.txt": 143866
+  },
+  "rejected": {
+    "tracking-observe.txt": {
+      "count": 10,
+      "entries": [
+        "_analytics.synonym.to",
+        "email_tracking.actforsport.eu",
+        "email_tracking.nowlvble.com",
+        "plausible_analytics.robustonian.com",
+        "sw4_us-west-2_web.prd.api.a.intuit.com",
+        "telemetry_ads.msn.com",
+        "telemetry_preview.msn.com",
+        "telemetry_rad.msn.com",
+        "telemetry_ssw.live.com",
+        "telemetry_watson.live.com"
+      ],
+      "reason": "not a valid hostname under the teenDNS v1 grammar"
+    }
+  }
+}
