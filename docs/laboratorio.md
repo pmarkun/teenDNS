@@ -64,6 +64,8 @@ LOAD_DURATION=10m ./scripts/lab-load-test.sh
 
 O ensaio imprime throughput e latência p95. A carga usa conexões TLS reais, o mesmo IP do gateway e um hostname SNI diferente para cada perfil sintético.
 
+Em 23 de setembro de 2026, o ensaio completo executou 30.000 consultas para 50 perfis durante dez minutos, sustentando 50 consultas/s, sem falhas e com p95 de 1,982 ms no laboratório local. Consulte [status.md](status.md) para o contexto e os limites dessa medição.
+
 Os eventos aparecem em JSON nos logs do gateway:
 
 ```bash

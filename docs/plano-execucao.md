@@ -2,6 +2,8 @@
 
 Versão inicial: 23 de setembro de 2026.
 
+Estado atual: M1, M2 e M3 concluídos no laboratório local. Resultados e lacunas estão registrados em [status.md](status.md). O próximo marco é M4 — autoprovisionamento.
+
 ## 1. Objetivo da validação
 
 Construir e testar um serviço de DNS privado no qual vários perfis compartilham o mesmo servidor e endereço IP, mas recebem políticas diferentes a partir do hostname usado na conexão DNS-over-TLS.

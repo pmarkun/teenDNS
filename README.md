@@ -5,7 +5,9 @@ Documento de resgate do conceito discutido em 23 de setembro de 2026. Nome de tr
 Documentação técnica:
 
 - [Plano de execução](docs/plano-execucao.md)
+- [Estado da execução](docs/status.md)
 - [Laboratório local](docs/laboratorio.md)
+- [Ameaças e limites](docs/ameacas-e-limites.md)
 
 ## Ideia central
 
