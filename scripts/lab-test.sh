@@ -35,4 +35,7 @@ nix develop --command go run ./cmd/dnscheck \
   -query school.blocked.test \
   -want-ip 192.0.2.40
 
+./scripts/lab-cache-test.sh
+./scripts/lab-reload-test.sh
+
 echo "laboratory checks passed"

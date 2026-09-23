@@ -19,6 +19,7 @@ func main() {
 	query := flag.String("query", "allowed.test", "DNS name")
 	wantRcode := flag.String("want-rcode", "NOERROR", "expected response code")
 	wantIP := flag.String("want-ip", "", "expected IPv4 address")
+	wantMaxTTL := flag.Uint("want-max-ttl", 0, "maximum expected answer TTL")
 	flag.Parse()
 
 	if *serverName == "" {
@@ -61,6 +62,13 @@ func main() {
 		}
 		if !found {
 			log.Fatalf("expected IP %s, got %v", *wantIP, response.Answer)
+		}
+	}
+	if *wantMaxTTL > 0 {
+		for _, answer := range response.Answer {
+			if answer.Header().Ttl > uint32(*wantMaxTTL) {
+				log.Fatalf("expected TTL <= %d, got %d for %s", *wantMaxTTL, answer.Header().Ttl, answer.String())
+			}
 		}
 	}
 	fmt.Printf("ok profile=%s query=%s rcode=%s answers=%v\n", *serverName, *query, gotRcode, response.Answer)

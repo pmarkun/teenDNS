@@ -3,7 +3,9 @@ services:
     build:
       context: .
       dockerfile: docker/gateway.Dockerfile
-    command: ["fixture", "-listen", ":5353"]
+    command: ["fixture", "-listen", ":5353", "-metrics", ":8080"]
+    ports:
+      - "127.0.0.1:18080:8080"
     networks:
       lab:
         ipv4_address: 10.77.53.10
@@ -22,14 +24,13 @@ services:
     build:
       context: .
       dockerfile: docker/gateway.Dockerfile
-    command: ["gateway", "-config", "/config/gateway.json"]
+    command: ["gateway", "-config", "/runtime/gateway.json"]
     depends_on:
       - unbound
     ports:
       - "127.0.0.1:8853:853"
     volumes:
-      - ./.local/certs:/certs:ro
-      - ./config/lab/gateway.json:/config/gateway.json:ro
+      - ./.local:/runtime:ro
     networks:
       lab:
         ipv4_address: 10.77.53.30

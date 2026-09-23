@@ -44,17 +44,34 @@ func runGateway(arguments []string) {
 	if err != nil {
 		log.Fatalf("load TLS certificate: %v", err)
 	}
-	store, err := policy.NewStore(cfg.Profiles)
+	profiles, err := policy.NewManager(cfg.Profiles)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
+	reload := make(chan os.Signal, 1)
+	signal.Notify(reload, syscall.SIGHUP)
+	defer signal.Stop(reload)
+	go func() {
+		for range reload {
+			updated, err := config.Load(*configPath)
+			if err != nil {
+				log.Printf("reload config: %v", err)
+				continue
+			}
+			if err := profiles.Replace(updated.Profiles); err != nil {
+				log.Printf("reload profiles: %v", err)
+				continue
+			}
+			log.Printf("reloaded %d profiles", len(updated.Profiles))
+		}
+	}()
 	server := gateway.NewServer(
 		cfg.Listen,
 		&tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS13},
-		store,
+		profiles,
 		cfg.Upstream,
 		cfg.MaxTTL,
 		gateway.NewEventWriter(os.Stdout),
@@ -68,9 +85,10 @@ func runGateway(arguments []string) {
 func runFixture(arguments []string) {
 	flags := flag.NewFlagSet("fixture", flag.ExitOnError)
 	listen := flags.String("listen", ":5353", "UDP listen address")
+	metrics := flags.String("metrics", ":8080", "HTTP metrics listen address")
 	_ = flags.Parse(arguments)
 	log.Printf("fixture DNS listening on %s", *listen)
-	if err := fixture.Serve(*listen); err != nil {
+	if err := fixture.Serve(*listen, *metrics); err != nil {
 		log.Fatal(fmt.Errorf("serve fixture DNS: %w", err))
 	}
 }

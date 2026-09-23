@@ -47,13 +47,17 @@ func (w *EventWriter) Write(event Event) {
 type Server struct {
 	address  string
 	tls      *tls.Config
-	profiles *policy.Store
+	profiles ProfileLookup
 	upstream string
 	maxTTL   uint32
 	events   *EventWriter
 }
 
-func NewServer(address string, tlsConfig *tls.Config, profiles *policy.Store, upstream string, maxTTL uint32, events *EventWriter) *Server {
+type ProfileLookup interface {
+	Profile(hostname string) (policy.Profile, bool)
+}
+
+func NewServer(address string, tlsConfig *tls.Config, profiles ProfileLookup, upstream string, maxTTL uint32, events *EventWriter) *Server {
 	return &Server{
 		address:  address,
 		tls:      tlsConfig,

@@ -1,8 +1,8 @@
 {
   "listen": ":853",
   "upstream": "unbound:5353",
-  "certificate": "/certs/server.pem",
-  "private_key": "/certs/server-key.pem",
+  "certificate": "/runtime/certs/server.pem",
+  "private_key": "/runtime/certs/server-key.pem",
   "max_ttl": 300,
   "profiles": [
     {

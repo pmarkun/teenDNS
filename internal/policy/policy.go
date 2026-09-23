@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 )
 
 type Action string
@@ -40,6 +41,33 @@ type Decision struct {
 
 type Store struct {
 	profiles map[string]Profile
+}
+
+type Manager struct {
+	store atomic.Pointer[Store]
+}
+
+func NewManager(profiles []Profile) (*Manager, error) {
+	store, err := NewStore(profiles)
+	if err != nil {
+		return nil, err
+	}
+	manager := &Manager{}
+	manager.store.Store(store)
+	return manager, nil
+}
+
+func (m *Manager) Replace(profiles []Profile) error {
+	store, err := NewStore(profiles)
+	if err != nil {
+		return err
+	}
+	m.store.Store(store)
+	return nil
+}
+
+func (m *Manager) Profile(hostname string) (Profile, bool) {
+	return m.store.Load().Profile(hostname)
 }
 
 func NewStore(profiles []Profile) (*Store, error) {

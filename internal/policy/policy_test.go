@@ -80,3 +80,21 @@ func TestStoreFindsNormalizedHostname(t *testing.T) {
 		t.Fatalf("unexpected profile lookup: %+v, %v", profile, ok)
 	}
 }
+
+func TestManagerReplacesProfilesAtomically(t *testing.T) {
+	manager, err := NewManager([]Profile{
+		{ID: "ana", Hostname: "p-ana.dns.teendns.test", DefaultAction: ActionAllow, Version: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Replace([]Profile{
+		{ID: "ana", Hostname: "p-ana.dns.teendns.test", DefaultAction: ActionBlock, Version: 2},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	profile, ok := manager.Profile("p-ana.dns.teendns.test")
+	if !ok || profile.Version != 2 || profile.DefaultAction != ActionBlock {
+		t.Fatalf("unexpected profile after replacement: %+v, %v", profile, ok)
+	}
+}
