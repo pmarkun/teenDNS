@@ -5,9 +5,11 @@ Os conceitos de referência estão em [`design/concepts`](../design/concepts/).
 
 ## Ideia visual
 
-O teenDNS deve parecer uma cartilha editorial calma: claro, direto e humano.
-A primeira camada mostra somente a escolha cotidiana. Explicações, eventos e
-opções técnicas aparecem apenas quando a pessoa pede mais profundidade.
+O teenDNS usa a linguagem de um zine brasileiro sobre internet: direto, jovem,
+um pouco punk e deliberadamente imperfeito. A personalidade aparece na tinta,
+nos recortes e na tipografia; a operação continua simples. A primeira camada
+mostra somente a escolha cotidiana. Explicações, eventos e opções técnicas
+aparecem quando a pessoa pede mais profundidade.
 
 Evitar:
 
@@ -21,39 +23,39 @@ Evitar:
 
 | Token | Valor | Uso |
 | --- | --- | --- |
-| `paper` | `#f3f0e8` | fundo principal, sem alterar a temperatura |
-| `ink` | `#111713` | texto e linhas principais |
-| `forest` | `#0c4a35` | estados permitidos e faixas explicativas |
-| `signal` | `#f04422` | ação principal, bloqueio e numeração |
-| `note` | `#f6dda0` | uma nota educativa pontual |
+| `paper` | `#f2f0e9` | papel cru e fundo principal |
+| `ink` | `#0b0b0a` | texto, regras e grandes massas |
+| `acid` | `#adff19` | seleção, permissão e ações rápidas |
+| `signal` | `#f32b20` | proteção, chamada e sublinhado |
+| `cobalt` | `#1748e8` | observação e contraste pontual |
 | `muted` | `#61665f` | texto secundário |
 | `line` | `#9b9b91` | divisórias finas |
 
 ## Tipografia
 
-- Títulos editoriais: `Source Serif 4`, `Georgia`, serif.
+- Títulos: `Barlow Condensed`, `Impact`, `Arial Narrow`, sans-serif.
 - Interface e texto: `Inter`, `Arial`, sans-serif.
 - Hostnames, rótulos técnicos e notas: `IBM Plex Mono`, `Courier New`, monospace.
 - Controles nunca dependem da tipografia padrão do navegador.
 
 ## Geometria e espaçamento
 
-- Raios entre `0` e `4px`; botões de ação podem ser totalmente retos.
-- Bordas de `1px`, sombras apenas quando representam papel sobre papel.
+- Raios de `0`; recortes e controles são retangulares.
+- Bordas entre `1px` e `5px`; nenhuma sombra macia.
 - Escala de espaço: `4, 8, 12, 16, 24, 32, 48, 72px`.
 - Conteúdo público limitado a `1312px`; painel ocupa a largura disponível.
 - Componentes principais são trilhos, listas abertas, faixas e gavetas.
 
 ## Componentes
 
-- **Marca:** farol geométrico com dois feixes na cor de sinalização.
-- **Botão primário:** fundo `signal`, texto branco, altura mínima de `48px`.
+- **Marca:** wordmark pesado `teenDNS`, com `DNS` em vermelho.
+- **Botão primário:** fundo `ink`, texto `acid`, altura mínima de `48px`.
 - **Botão secundário:** fundo transparente, borda `ink`.
 - **Links:** sublinhado fino, seta SVG quando indicam avanço.
 - **Lista de regras:** nome e ação em linhas abertas; motivo só no segundo nível.
 - **Estado:** ponto preenchido mais texto; não usar selo em formato de pílula.
 - **Gaveta de edição:** painel lateral com borda, motivo obrigatório e ações claras.
-- **Foco:** contorno de `3px` em `note`, com contraste sobre todos os fundos.
+- **Foco:** contorno de `3px` em `cobalt`, com contraste sobre todos os fundos.
 
 ## Movimento
 
@@ -80,12 +82,12 @@ Evitar:
 
 ### Painel
 
-- `teenDNS`, `entenda`, `ajuda`, `funcionando`
+- `teenDNS`, `entenda`, `ajuda`, `tá rodando`
 - `Perfis`, `Casa`, `Estudos`, `+ novo perfil`
-- `Casa`
+- `CASA`
 - `Escolha o que observar e o que proteger.`
 - `DNS privado`, `copiar`
-- `Regras`, `+ adicionar regra`, `Hoje`, `ver detalhes`
+- `REGRAS, POR ENQUANTO`, `+ botar outra regra`, `HOJE`, `ver o rolê`
 
 ## Regra de profundidade
 
