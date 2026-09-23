@@ -25,7 +25,9 @@ type Rule struct {
 
 type Profile struct {
 	ID            string `json:"id"`
+	Label         string `json:"label,omitempty"`
 	Hostname      string `json:"hostname"`
+	Disabled      bool   `json:"disabled,omitempty"`
 	DefaultAction Action `json:"default_action"`
 	Version       int64  `json:"version"`
 	Rules         []Rule `json:"rules"`
@@ -74,6 +76,9 @@ func NewStore(profiles []Profile) (*Store, error) {
 	store := &Store{profiles: make(map[string]Profile, len(profiles))}
 
 	for _, profile := range profiles {
+		if profile.Disabled {
+			continue
+		}
 		normalizedHostname, err := normalizeName(profile.Hostname)
 		if err != nil {
 			return nil, fmt.Errorf("profile %q hostname: %w", profile.ID, err)

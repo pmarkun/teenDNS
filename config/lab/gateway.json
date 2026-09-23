@@ -7,6 +7,7 @@
   "profiles": [
     {
       "id": "ana",
+      "label": "Casa",
       "hostname": "p-ana.dns.teendns.test",
       "default_action": "allow",
       "version": 1,
@@ -28,6 +29,7 @@
     },
     {
       "id": "bia",
+      "label": "Estudos",
       "hostname": "p-bia.dns.teendns.test",
       "default_action": "allow",
       "version": 1,

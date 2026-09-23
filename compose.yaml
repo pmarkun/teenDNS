@@ -29,8 +29,12 @@ services:
       - unbound
     ports:
       - "127.0.0.1:8853:853"
+      - "127.0.0.1:18081:8081"
+    environment:
+      TEENDNS_ADMIN_TOKEN: teendns-lab
+    user: "${TEENDNS_UID:-1000}:${TEENDNS_GID:-100}"
     volumes:
-      - ./.local:/runtime:ro
+      - ./.local:/runtime
     networks:
       lab:
         ipv4_address: 10.77.53.30

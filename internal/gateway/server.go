@@ -32,6 +32,10 @@ type EventWriter struct {
 	encoder *json.Encoder
 }
 
+type EventSink interface {
+	Write(Event)
+}
+
 func NewEventWriter(writer io.Writer) *EventWriter {
 	return &EventWriter{encoder: json.NewEncoder(writer)}
 }
@@ -50,14 +54,14 @@ type Server struct {
 	profiles ProfileLookup
 	upstream string
 	maxTTL   uint32
-	events   *EventWriter
+	events   EventSink
 }
 
 type ProfileLookup interface {
 	Profile(hostname string) (policy.Profile, bool)
 }
 
-func NewServer(address string, tlsConfig *tls.Config, profiles ProfileLookup, upstream string, maxTTL uint32, events *EventWriter) *Server {
+func NewServer(address string, tlsConfig *tls.Config, profiles ProfileLookup, upstream string, maxTTL uint32, events EventSink) *Server {
 	return &Server{
 		address:  address,
 		tls:      tlsConfig,
