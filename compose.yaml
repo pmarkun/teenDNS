@@ -1,0 +1,41 @@
+services:
+  fixture:
+    build:
+      context: .
+      dockerfile: docker/gateway.Dockerfile
+    command: ["fixture", "-listen", ":5353"]
+    networks:
+      lab:
+        ipv4_address: 10.77.53.10
+
+  unbound:
+    build:
+      context: .
+      dockerfile: docker/unbound.Dockerfile
+    depends_on:
+      - fixture
+    networks:
+      lab:
+        ipv4_address: 10.77.53.20
+
+  gateway:
+    build:
+      context: .
+      dockerfile: docker/gateway.Dockerfile
+    command: ["gateway", "-config", "/config/gateway.json"]
+    depends_on:
+      - unbound
+    ports:
+      - "127.0.0.1:8853:853"
+    volumes:
+      - ./.local/certs:/certs:ro
+      - ./config/lab/gateway.json:/config/gateway.json:ro
+    networks:
+      lab:
+        ipv4_address: 10.77.53.30
+
+networks:
+  lab:
+    ipam:
+      config:
+        - subnet: 10.77.53.0/24

@@ -2,7 +2,10 @@
 
 Documento de resgate do conceito discutido em 23 de setembro de 2026. Nome de trabalho usado na conversa original: **Farol da Rede**.
 
-Plano técnico: [docs/plano-execucao.md](docs/plano-execucao.md).
+Documentação técnica:
+
+- [Plano de execução](docs/plano-execucao.md)
+- [Laboratório local](docs/laboratorio.md)
 
 ## Ideia central
 
