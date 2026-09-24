@@ -1,29 +1,50 @@
 import { type FormEvent, useCallback, useEffect, useState } from 'react'
-import { api, type HouseSummary, type Invitation, type WaitlistEntry, getToken, setToken } from '../api'
+import { api, type HouseSummary, type Invitation, type WaitlistEntry, clearToken, setToken } from '../api'
 import { Drawer, Logo } from '../components'
 
 export function Admin() {
-  const [authNeeded, setAuthNeeded] = useState(() => !getToken())
+  const [state, setState] = useState<'checking' | 'login' | 'console'>('checking')
 
-  if (authNeeded) return <OperatorLogin onSuccess={() => setAuthNeeded(false)} />
+  useEffect(() => {
+    let cancelled = false
+    void api.adminGuard().then((ok) => {
+      if (!cancelled) setState(ok ? 'console' : 'login')
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  if (state === 'checking') return <main className="login"><Logo /></main>
+  if (state === 'login') return <OperatorLogin onSuccess={() => setState('console')} />
   return <AdminConsole />
 }
 
 function OperatorLogin({ onSuccess }: { onSuccess: () => void }) {
   const [value, setValue] = useState('')
-  function submit(event: FormEvent) {
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  async function submit(event: FormEvent) {
     event.preventDefault()
+    setBusy(true)
+    setError('')
     setToken(value)
-    onSuccess()
+    const ok = await api.adminGuard()
+    if (ok) onSuccess()
+    else {
+      clearToken()
+      setError('Chave inválida. Tente de novo.')
+    }
+    setBusy(false)
+    setValue('')
   }
   return (
     <main className="login">
       <Logo />
-      <form onSubmit={submit}>
+      <form onSubmit={(event) => void submit(event)}>
         <h1>ADMIN</h1>
         <p>Use a chave administrativa do operador.</p>
         <label>chave <input type="password" value={value} onChange={(event) => setValue(event.target.value)} autoFocus /></label>
-        <button className="button button--ink">ENTRAR</button>
+        <button className="button button--ink" disabled={busy}>{busy ? 'CONFERINDO…' : 'ENTRAR'}</button>
+        {error && <p className="form-error" role="alert">{error}</p>}
       </form>
     </main>
   )
@@ -94,6 +115,7 @@ function HousesSection() {
   const [houses, setHouses] = useState<HouseSummary[]>([])
   const [error, setError] = useState('')
   const [deleting, setDeleting] = useState<HouseSummary | null>(null)
+  const [editingEmails, setEditingEmails] = useState<HouseSummary | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -119,9 +141,12 @@ function HousesSection() {
             <li key={house.id}>
               <div>
                 <strong>{house.name}</strong>
-                <small>{house.email || 'sem e-mail'} · {house.profile_count} perfil(is)</small>
+                <small>{((house.emails || []).length > 0 ? house.emails.join(' · ') : 'sem e-mails')} · {house.profile_count} perfil(is)</small>
               </div>
-              <button type="button" className="button button--danger" onClick={() => setDeleting(house)}>apagar</button>
+              <div className="admin-row-actions">
+                <button type="button" className="button button--ink" onClick={() => setEditingEmails(house)}>e-mails</button>
+                <button type="button" className="button button--danger" onClick={() => setDeleting(house)}>apagar</button>
+              </div>
             </li>
           ))}
         </ul>
@@ -129,7 +154,49 @@ function HousesSection() {
       {deleting && (
         <DeleteHouseDrawer house={deleting} onClose={() => setDeleting(null)} onDeleted={() => { setDeleting(null); void load() }} />
       )}
+      {editingEmails && (
+        <EmailsDrawer
+          house={editingEmails}
+          onClose={() => setEditingEmails(null)}
+          onSaved={(updated) => {
+            setHouses((current) => current.map((item) => item.id === updated.id ? { ...item, email: updated.email, emails: updated.emails } : item))
+            setEditingEmails(null)
+          }}
+        />
+      )}
     </section>
+  )
+}
+
+function EmailsDrawer({ house, onClose, onSaved }: { house: HouseSummary; onClose: () => void; onSaved: (updated: { id: string; email?: string; emails: string[] }) => void }) {
+  const [value, setValue] = useState((house.emails || []).join('\n'))
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      const emails = [...new Set(value.split(/[\n,]/).map((email) => email.trim()).filter(Boolean))]
+      onSaved(await api.updateHouseEmails(house.id, emails))
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível salvar os e-mails')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Drawer title={`E-MAILS DE ${house.name.toUpperCase()}`} onClose={onClose}>
+      <form className="drawer-form" onSubmit={(event) => void submit(event)}>
+        <p>Quem recebe o link de acesso do painel desta casa. O primeiro e-mail também recebe o resumo semanal.</p>
+        <label>e-mails <small>um por linha</small><textarea className="domain-list" required placeholder={'responsavel@exemplo.com\noutro-responsavel@exemplo.com'} value={value} onChange={(event) => setValue(event.target.value)} /></label>
+        <div className="drawer-actions">
+          <button className="button button--ink" disabled={busy}>{busy ? 'SALVANDO…' : 'SALVAR E-MAILS'}</button>
+        </div>
+        {error && <p className="form-error" role="alert">{error}</p>}
+      </form>
+    </Drawer>
   )
 }
 

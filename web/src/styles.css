@@ -78,6 +78,7 @@ h1, h2, h3, .button, .logo { font-family: 'Barlow Condensed', Impact, 'Arial Nar
 .button--ink { background: var(--ink); color: var(--acid); }
 .button--danger { background: var(--red); color: white; }
 .button--outline-light { border: 2px solid white; color: white; background: transparent; }
+.button--outline { border: 3px solid var(--ink); color: var(--ink); background: transparent; }
 .button:disabled { cursor: progress; opacity: .65; }
 
 /* Public page */
@@ -223,6 +224,8 @@ h1, h2, h3, .button, .logo { font-family: 'Barlow Condensed', Impact, 'Arial Nar
 .endpoint b { font-family: 'Barlow Condensed'; font-size: 22px; }
 .endpoint code { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 16px; }
 .endpoint button { border: 0; padding: 10px 19px; background: var(--acid); font-family: 'Barlow Condensed'; font-size: 21px; font-weight: 900; cursor: pointer; }
+.setup-button { width: 100%; margin-top: 22px; padding: 13px 16px; border: 0; border-bottom: 5px solid var(--ink); background: var(--acid); color: var(--ink); text-align: left; font-family: 'Barlow Condensed'; font-size: 29px; font-weight: 900; cursor: pointer; }
+.setup-button:hover { background: var(--ink); color: var(--acid); }
 .rules-heading { margin-top: 34px; display: flex; align-items: end; justify-content: space-between; border-bottom: 5px solid var(--ink); }
 .rules-heading h2 { margin: 0; font-size: 38px; line-height: 1; }
 .rules-heading span { margin-bottom: 5px; font-weight: 850; }
@@ -292,6 +295,36 @@ h1, h2, h3, .button, .logo { font-family: 'Barlow Condensed', Impact, 'Arial Nar
 .details dd { margin: 0; font-family: 'Barlow Condensed'; font-size: 50px; font-weight: 900; }
 .details code { display: block; margin: 24px 0; padding: 15px; border: 2px solid; overflow-wrap: anywhere; }
 .toast { position: fixed; right: 24px; bottom: 24px; z-index: 40; max-width: 420px; padding: 16px 20px; border: 3px solid var(--ink); background: var(--red); color: white; font-weight: 800; cursor: pointer; }
+
+.setup-intro { padding: 22px 0 4px; }
+.setup-intro p { margin: 0; line-height: 1.5; }
+.setup-device { margin-top: 26px; padding-top: 18px; border-top: 5px solid var(--ink); }
+.setup-device h3 { margin: 0 0 9px; font-size: 32px; line-height: .95; }
+.setup-device > p { margin: 0; font-size: 15px; line-height: 1.5; }
+.setup-device > small { display: block; margin-top: 11px; color: var(--muted); font-size: 11px; line-height: 1.45; font-weight: 700; }
+.setup-downloads { margin-top: 14px; display: grid; gap: 10px; }
+.setup-downloads .button { width: 100%; justify-content: flex-start; font-size: 20px; }
+.setup-device details { margin-top: 13px; }
+.setup-device details summary { width: max-content; font-size: 13px; font-weight: 800; cursor: pointer; }
+.setup-device details ol { margin: 10px 0 0; padding-left: 20px; font-size: 14px; line-height: 1.55; }
+.setup-device details li { margin-bottom: 8px; }
+.setup-copy { margin-top: 13px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: stretch; }
+.setup-copy code { min-width: 0; padding: 13px; border: 2px solid var(--ink); background: white; overflow-wrap: anywhere; font-size: 13px; }
+.setup-copy button { padding: 0 18px; border: 2px solid var(--ink); background: var(--acid); font-family: 'Barlow Condensed'; font-size: 20px; font-weight: 900; cursor: pointer; }
+.setup-values { margin: 13px 0 0; }
+.setup-values div { padding: 10px 0; border-bottom: 2px solid var(--ink); display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; align-items: baseline; }
+.setup-values dt { font-size: 12px; font-weight: 850; text-transform: uppercase; letter-spacing: .4px; }
+.setup-values dd { margin: 0; min-width: 0; }
+.setup-values code { overflow-wrap: anywhere; font-size: 13px; }
+.setup-test { margin-top: 30px; padding: 19px; border: 4px solid var(--acid); background: var(--ink); color: white; }
+.setup-test h3 { margin: 0 0 9px; color: var(--acid); font-size: 31px; line-height: .95; }
+.setup-test > p:not([role="status"]) { margin: 0; font-size: 15px; line-height: 1.5; }
+.setup-test .button { width: 100%; background: var(--acid); color: var(--ink); }
+.setup-test .button:disabled { background: var(--muted); }
+.setup-test p[role="status"] { margin: 14px 0 0; font-size: 15px; font-weight: 800; line-height: 1.45; }
+.setup-test--ok { color: var(--acid); }
+.setup-test--other { color: white; }
+.setup-test--timeout, .setup-test--error { color: var(--red); }
 .login { min-height: 100vh; padding: 42px; display: grid; place-items: start center; align-content: center; gap: 60px; }
 .login form, .login .login-card { width: min(460px, 100%); padding: 36px; border: 6px solid var(--ink); }
 .login h1 { font-size: 54px; margin-bottom: 10px; }
@@ -315,6 +348,7 @@ h1, h2, h3, .button, .logo { font-family: 'Barlow Condensed', Impact, 'Arial Nar
 .admin-rows li:first-child { border-top: none; }
 .admin-rows small { display: block; font-weight: 600; opacity: .75; }
 .admin-rows .button { width: auto; padding: 10px 18px; }
+.admin-row-actions { display: flex; gap: 8px; }
 .preset-picker { margin: 28px 0; padding: 0; border: 0; }
 .preset-picker legend { font-family: 'Barlow Condensed'; font-size: 27px; font-weight: 900; }
 .preset-picker > p { margin: 3px 0 13px; color: var(--muted); font-size: 13px; line-height: 1.4; }
@@ -455,6 +489,7 @@ h1, h2, h3, .button, .logo { font-family: 'Barlow Condensed', Impact, 'Arial Nar
   .today p { font-size: 25px; }
   .today blockquote { grid-column: 1 / -1; }
   .drawer { padding: 25px 20px; }
+  .setup-values div { grid-template-columns: 1fr; gap: 4px; }
 
   .youth-header { width: calc(100% - 32px); min-height: 74px; grid-template-columns: 1fr auto; }
   .youth-header .logo { font-size: 36px; }

@@ -29,6 +29,7 @@ import (
 	"github.com/pmarkun/teendns/internal/mail"
 	"github.com/pmarkun/teendns/internal/pairing"
 	"github.com/pmarkun/teendns/internal/policy"
+	"github.com/pmarkun/teendns/internal/setup"
 )
 
 // DigestPurger removes a deleted house's accumulated digest data. Satisfied
@@ -48,6 +49,9 @@ type Server struct {
 	magicLinks     *magiclink.Manager
 	digest         DigestPurger
 	hostnameSuffix string
+	resolverIP     string
+	dnsPort        string
+	testDomain     string
 	token          string
 	catalogDir     string
 	mailer         mail.Sender
@@ -116,10 +120,21 @@ type sessionResponse struct {
 }
 
 type houseSummaryResponse struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Email        string `json:"email,omitempty"`
-	ProfileCount int    `json:"profile_count"`
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Email        string   `json:"email,omitempty"`
+	Emails       []string `json:"emails"`
+	ProfileCount int      `json:"profile_count"`
+}
+
+type houseEmailsRequest struct {
+	Emails []string `json:"emails"`
+}
+
+type houseEmailsResponse struct {
+	ID     string   `json:"id"`
+	Email  string   `json:"email,omitempty"`
+	Emails []string `json:"emails"`
 }
 
 type waitlistEntryResponse struct {
@@ -151,6 +166,35 @@ type youthProfile struct {
 	Rules []youthRule `json:"rules"`
 }
 
+// pairingOutcomeResponse is the scoped counterpart of pairing.Status: it tells
+// the panel whether a device already resolved the challenge and, if so, via
+// which of the house's profiles — without ever exposing a session token.
+type pairingOutcomeResponse struct {
+	Observed  bool   `json:"observed"`
+	ProfileID string `json:"profile_id,omitempty"`
+}
+
+// setupInfoResponse carries the neutral values for the manual configuration
+// section: hostname, public resolver IP (may be empty in the lab), DoT port
+// and the domain used by scripts for their resolution test.
+type setupInfoResponse struct {
+	Hostname   string `json:"hostname"`
+	IP         string `json:"ip"`
+	Port       string `json:"port"`
+	TestDomain string `json:"test_domain"`
+}
+
+const (
+	defaultDNSPort        = "853"
+	defaultDNSTestDomain  = "example.com"
+	setupBatchFilename    = "configurar-teendns.bat"
+	setupRemoveFilename   = "remover-teendns.bat"
+	setupProfileFilename  = "teendns.mobileconfig"
+	setupWindowsMime      = "text/plain; charset=utf-8"
+	setupAppleMime        = "application/x-apple-aspen-config; charset=utf-8"
+	setupInfoMime         = "application/json; charset=utf-8"
+)
+
 func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, events *gateway.EventBuffer, pairings *pairing.Manager, magicLinks *magiclink.Manager, digest DigestPurger, hostnameSuffix, token string, mailer mail.Sender) (*Server, error) {
 	if strings.TrimSpace(token) == "" {
 		return nil, errors.New("admin token is required")
@@ -170,6 +214,11 @@ func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, e
 	if hostnameSuffix == "" {
 		hostnameSuffix = "dns.teendns.test"
 	}
+	normalizedSuffix := strings.TrimSuffix(strings.ToLower(hostnameSuffix), ".")
+	resolverIP := strings.TrimSpace(os.Getenv("TEENDNS_DNS_PUBLIC_IP"))
+	if resolverIP == "" {
+		resolverIP = setup.ResolverIP(normalizedSuffix)
+	}
 	return &Server{
 		configPath:     configPath,
 		config:         cloneConfig(cfg),
@@ -178,7 +227,10 @@ func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, e
 		pairings:       pairings,
 		magicLinks:     magicLinks,
 		digest:         digest,
-		hostnameSuffix: strings.TrimSuffix(strings.ToLower(hostnameSuffix), "."),
+		hostnameSuffix: normalizedSuffix,
+		resolverIP:     resolverIP,
+		dnsPort:        environmentOrDefault("TEENDNS_DNS_PORT", defaultDNSPort),
+		testDomain:     environmentOrDefault("TEENDNS_DNS_TEST_DOMAIN", defaultDNSTestDomain),
 		token:          token,
 		catalogDir:     environmentOrDefault("TEENDNS_CATALOG_DIR", "catalog/v1"),
 		mailer:         mailer,
@@ -206,12 +258,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", func(writer http.ResponseWriter, _ *http.Request) {
 		writeJSON(writer, http.StatusOK, map[string]string{"status": "ok"})
 	})
+	mux.HandleFunc("GET /api/v1/admin/guard", s.adminGuard)
 	mux.HandleFunc("POST /api/v1/pairing/challenges", s.createPairingChallenge)
 	mux.HandleFunc("GET /api/v1/pairing/challenges/{id}", s.pairingChallengeStatus)
+	mux.HandleFunc("GET /api/v1/pairing/challenges/{id}/outcome", s.authorize(s.pairingChallengeOutcome))
 	mux.HandleFunc("GET /api/v1/youth/profile", s.youthProfile)
 	mux.HandleFunc("POST /api/v1/houses", s.registerHouse)
 	mux.HandleFunc("GET /api/v1/houses", s.authorize(s.listHouses))
 	mux.HandleFunc("DELETE /api/v1/houses/{id}", s.authorize(s.deleteHouse))
+	mux.HandleFunc("PUT /api/v1/houses/{id}/emails", s.authorize(s.setHouseEmails))
 	mux.HandleFunc("POST /api/v1/invitations", s.authorize(s.createInvitation))
 	mux.HandleFunc("GET /api/v1/waitlist", s.authorize(s.listWaitlist))
 	mux.HandleFunc("POST /api/v1/auth/magic-links", s.requestMagicLink)
@@ -278,6 +333,9 @@ func (s *Server) registerHouse(writer http.ResponseWriter, request *http.Request
 		return
 	}
 	house := config.House{ID: houseIDToken[:12], Name: input.HouseName, AdminTokenHash: tokenHash(houseToken), Email: invitation.Email}
+	if invitation.Email != "" {
+		house.Emails = []string{invitation.Email}
+	}
 	groups, err := presetGroups(input.Preset, s.catalogDir)
 	if err != nil {
 		writeError(writer, http.StatusBadRequest, err)
@@ -409,6 +467,55 @@ func looksLikeEmail(value string) bool {
 	return strings.Contains(domain, ".") && !strings.ContainsAny(value, " \t\n")
 }
 
+// houseHasEmail reports whether email is one of the addresses the house
+// registered for magic-link login, including the primary one.
+func houseHasEmail(house config.House, email string) bool {
+	if strings.EqualFold(house.Email, email) {
+		return true
+	}
+	for _, candidate := range house.Emails {
+		if strings.EqualFold(candidate, email) {
+			return true
+		}
+	}
+	return false
+}
+
+// houseEmails returns the effective list of admin addresses for a house,
+// falling back to the primary email so hand-built configurations behave the
+// same as loaded ones (where Load migrates Email into Emails).
+func houseEmails(house config.House) []string {
+	if len(house.Emails) == 0 {
+		if house.Email != "" {
+			return []string{house.Email}
+		}
+		return []string{}
+	}
+	return house.Emails
+}
+
+// normalizeEmails trims, lowercases and deduplicates a list of addresses,
+// rejecting anything that does not look like an email.
+func normalizeEmails(values []string) ([]string, error) {
+	seen := make(map[string]struct{})
+	result := make([]string, 0, len(values))
+	for _, raw := range values {
+		email := strings.ToLower(strings.TrimSpace(raw))
+		if email == "" {
+			continue
+		}
+		if !looksLikeEmail(email) {
+			return nil, fmt.Errorf("e-mail inválido: %q", raw)
+		}
+		if _, exists := seen[email]; exists {
+			continue
+		}
+		seen[email] = struct{}{}
+		result = append(result, email)
+	}
+	return result, nil
+}
+
 // requestMagicLink is the public entry point of the email-first login flow:
 // a house with this email gets a one-time login link; anyone else gets
 // added to the waitlist for an operator to invite later.
@@ -427,7 +534,7 @@ func (s *Server) requestMagicLink(writer http.ResponseWriter, request *http.Requ
 	s.mu.RLock()
 	var houseID string
 	for _, house := range s.config.Houses {
-		if strings.EqualFold(house.Email, email) {
+		if houseHasEmail(house, email) {
 			houseID = house.ID
 			break
 		}
@@ -485,6 +592,59 @@ func (s *Server) createSession(writer http.ResponseWriter, request *http.Request
 	writeJSON(writer, http.StatusCreated, sessionResponse{SessionToken: sessionToken})
 }
 
+// adminGuard is the server-side gate for the operator console: it returns
+// 200 only when the Authorization header carries the operator token, so the
+// web app can refuse to render any admin content without a valid credential.
+func (s *Server) adminGuard(writer http.ResponseWriter, request *http.Request) {
+	provided := strings.TrimPrefix(request.Header.Get("Authorization"), "Bearer ")
+	if len(provided) == len(s.token) && subtle.ConstantTimeCompare([]byte(provided), []byte(s.token)) == 1 {
+		writeJSON(writer, http.StatusOK, map[string]bool{"operator": true})
+		return
+	}
+	writeError(writer, http.StatusUnauthorized, errors.New("chave de operador inválida"))
+}
+
+// setHouseEmails replaces the list of addresses allowed to log into a house's
+// panel via magic link. Only the global operator may change it; the first
+// address stays as the house's primary email, used for the weekly digest.
+func (s *Server) setHouseEmails(writer http.ResponseWriter, request *http.Request) {
+	if !requestScope(request).operator {
+		writeError(writer, http.StatusForbidden, errors.New("somente o operador pode editar os e-mails da casa"))
+		return
+	}
+	var input houseEmailsRequest
+	if err := decodeJSON(request, &input); err != nil {
+		writeError(writer, http.StatusBadRequest, err)
+		return
+	}
+	emails, err := normalizeEmails(input.Emails)
+	if err != nil {
+		writeError(writer, http.StatusBadRequest, err)
+		return
+	}
+	houseID := request.PathValue("id")
+	var updated config.House
+	err = s.update(func(cfg *config.Config) error {
+		index := slices.IndexFunc(cfg.Houses, func(house config.House) bool { return house.ID == houseID })
+		if index < 0 {
+			return errors.New("casa não encontrada")
+		}
+		cfg.Houses[index].Emails = emails
+		if len(emails) > 0 {
+			cfg.Houses[index].Email = emails[0]
+		} else {
+			cfg.Houses[index].Email = ""
+		}
+		updated = cfg.Houses[index]
+		return nil
+	})
+	if err != nil {
+		writeError(writer, http.StatusNotFound, err)
+		return
+	}
+	writeJSON(writer, http.StatusOK, houseEmailsResponse{ID: updated.ID, Email: updated.Email, Emails: append([]string{}, updated.Emails...)})
+}
+
 func (s *Server) listHouses(writer http.ResponseWriter, request *http.Request) {
 	if !requestScope(request).operator {
 		writeError(writer, http.StatusForbidden, errors.New("somente o operador pode listar casas"))
@@ -500,7 +660,7 @@ func (s *Server) listHouses(writer http.ResponseWriter, request *http.Request) {
 				count++
 			}
 		}
-		houses = append(houses, houseSummaryResponse{ID: house.ID, Name: house.Name, Email: house.Email, ProfileCount: count})
+		houses = append(houses, houseSummaryResponse{ID: house.ID, Name: house.Name, Email: house.Email, Emails: append([]string{}, houseEmails(house)...), ProfileCount: count})
 	}
 	writeJSON(writer, http.StatusOK, map[string]any{"houses": houses})
 }
@@ -574,6 +734,28 @@ func (s *Server) pairingChallengeStatus(writer http.ResponseWriter, request *htt
 	}
 	writer.Header().Set("Cache-Control", "no-store")
 	writeJSON(writer, http.StatusOK, status)
+}
+
+// pairingChallengeOutcome reports, for the responsible side of the flow, which
+// profile (if any) observed a challenge's DNS query. It is scoped to the
+// authenticated house so a house cannot probe challenges it does not own.
+func (s *Server) pairingChallengeOutcome(writer http.ResponseWriter, request *http.Request) {
+	profileID, ok := s.pairings.Outcome(request.PathValue("id"))
+	if !ok {
+		writeError(writer, http.StatusNotFound, errors.New("pairing challenge not found or expired"))
+		return
+	}
+	writer.Header().Set("Cache-Control", "no-store")
+	if profileID == "" {
+		writeJSON(writer, http.StatusOK, pairingOutcomeResponse{Observed: false})
+		return
+	}
+	profile, ok := s.findProfile(profileID)
+	if !ok || !scopeAllows(requestScope(request), profile) {
+		writeError(writer, http.StatusNotFound, errors.New("perfil não encontrado"))
+		return
+	}
+	writeJSON(writer, http.StatusOK, pairingOutcomeResponse{Observed: true, ProfileID: profileID})
 }
 
 func (s *Server) youthProfile(writer http.ResponseWriter, request *http.Request) {
@@ -671,6 +853,10 @@ func (s *Server) profileResource(writer http.ResponseWriter, request *http.Reque
 		s.updateProfilePackage(writer, request, id, parts[2])
 		return
 	}
+	if len(parts) == 3 && parts[1] == "setup" && request.Method == http.MethodGet {
+		s.serveSetupFile(writer, profile, parts[2])
+		return
+	}
 	if len(parts) != 1 {
 		writeError(writer, http.StatusNotFound, errors.New("resource not found"))
 		return
@@ -745,6 +931,70 @@ func (s *Server) profileResource(writer http.ResponseWriter, request *http.Reque
 		writer.Header().Set("Allow", "GET, PUT, DELETE")
 		writeError(writer, http.StatusMethodNotAllowed, errors.New("method not allowed"))
 	}
+}
+
+// serveSetupFile generates, on request, the per-profile device configuration
+// for a kind in {info, windows.bat, windows-remove.bat, apple.mobileconfig}.
+// The profile has already passed the house-scope check in profileResource;
+// here we only refuse disabled profiles, whose endpoints can no longer be used.
+func (s *Server) serveSetupFile(writer http.ResponseWriter, profile policy.Profile, kind string) {
+	if profile.Disabled {
+		writeError(writer, http.StatusNotFound, errors.New("perfil não encontrado"))
+		return
+	}
+	switch kind {
+	case "info":
+		writer.Header().Set("Cache-Control", "no-store")
+		writeJSON(writer, http.StatusOK, setupInfoResponse{
+			Hostname: profile.Hostname, IP: s.resolverIP, Port: s.dnsPort, TestDomain: s.testDomain,
+		})
+		return
+	case "windows.bat":
+		content, err := setup.WindowsInstallBat(s.setupParams(profile))
+		if err != nil {
+			writeError(writer, http.StatusUnprocessableEntity, err)
+			return
+		}
+		writeSetupFile(writer, setupWindowsMime, setupBatchFilename, content)
+		return
+	case "windows-remove.bat":
+		content, err := setup.WindowsRemoveBat(s.setupParams(profile))
+		if err != nil {
+			writeError(writer, http.StatusUnprocessableEntity, err)
+			return
+		}
+		writeSetupFile(writer, setupWindowsMime, setupRemoveFilename, content)
+		return
+	case "apple.mobileconfig":
+		content, err := setup.AppleMobileConfig(s.setupParams(profile))
+		if err != nil {
+			writeError(writer, http.StatusUnprocessableEntity, err)
+			return
+		}
+		writeSetupFile(writer, setupAppleMime, setupProfileFilename, string(content))
+		return
+	default:
+		writeError(writer, http.StatusNotFound, errors.New("recurso de configuração não encontrado"))
+	}
+}
+
+func (s *Server) setupParams(profile policy.Profile) setup.Params {
+	return setup.Params{
+		Hostname:   profile.Hostname,
+		IP:         s.resolverIP,
+		Port:       s.dnsPort,
+		TestDomain: s.testDomain,
+	}
+}
+
+// writeSetupFile streams a generated artifact as an attachment so the browser
+// saves it with a stable, neutral filename.
+func writeSetupFile(writer http.ResponseWriter, contentType, filename, content string) {
+	writer.Header().Set("Content-Type", contentType)
+	writer.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+	writer.Header().Set("X-Content-Type-Options", "nosniff")
+	writer.Header().Set("Cache-Control", "no-store")
+	_, _ = io.WriteString(writer, content)
 }
 
 func (s *Server) updateProfilePackage(writer http.ResponseWriter, request *http.Request, profileID, packageID string) {
@@ -1160,7 +1410,11 @@ func randomToken() (string, error) {
 
 func cloneConfig(cfg config.Config) config.Config {
 	result := cfg
-	result.Houses = append([]config.House{}, cfg.Houses...)
+	result.Houses = make([]config.House, len(cfg.Houses))
+	for index, house := range cfg.Houses {
+		result.Houses[index] = house
+		result.Houses[index].Emails = append([]string{}, house.Emails...)
+	}
 	result.Invitations = append([]config.Invitation{}, cfg.Invitations...)
 	result.Waitlist = append([]config.WaitlistEntry{}, cfg.Waitlist...)
 	result.Profiles = make([]policy.Profile, len(cfg.Profiles))

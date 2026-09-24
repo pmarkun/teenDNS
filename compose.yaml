@@ -32,6 +32,7 @@ services:
       - "127.0.0.1:18081:8081"
     environment:
       TEENDNS_ADMIN_TOKEN: teendns-lab
+      TEENDNS_DNS_PUBLIC_IP: ${TEENDNS_DNS_PUBLIC_IP:-}
     user: "${TEENDNS_UID:-1000}:${TEENDNS_GID:-100}"
     volumes:
       - ./.local:/runtime

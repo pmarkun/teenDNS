@@ -105,6 +105,11 @@ correspondente.
 O `TEENDNS_ADMIN_TOKEN` continua sendo uma credencial operacional global do
 staging. Ele não deve ser entregue a famílias.
 
+O console `/admin` só abre o conteúdo para quem apresenta a chave correta: o
+próprio servidor valida o token em `GET /api/v1/admin/guard` antes de liberar
+qualquer lista, convite ou botão, e o bundle do site não embute mais token de
+operador. Abrir a rota sem a chave mostra apenas a tela de login.
+
 ## Login por e-mail (magic link)
 
 Em `/painel`, o login principal pede o e-mail da casa e manda um link de
@@ -118,7 +123,15 @@ em memória no processo do gateway — um restart derruba sessões de magic link
 ativas, mas o login por chave e um novo pedido de link continuam funcionando
 normalmente.
 
-O console `/admin` também lista as casas existentes (nome, e-mail, número de
+Uma casa pode ter vários e-mails de acesso. Além do endereço vindo do convite,
+o operador adiciona outros pelo botão **e-mails** de cada casa no console
+(`PUT /api/v1/houses/{id}/emails`): eles são normalizados, sem duplicados, e
+persistidos na casa dentro do `gateway.json`. Qualquer endereço da lista
+dispara o link de uso único para a mesma casa; o primeiro endereço é o que
+recebe o digest semanal. O registro antigo `email` continua sendo gravado como
+espelho do primeiro endereço.
+
+O console `/admin` também lista as casas existentes (nome, e-mails, número de
 perfis) com um botão de apagar que exige digitar o nome da casa para
 confirmar — a remoção é imediata e irreversível, e já apaga em cascata os
 perfis da casa e qualquer acumulado do digest semanal daquela casa.
@@ -136,6 +149,41 @@ apagado a cada envio bem-sucedido. Ver a política de retenção completa em
 O envio depende de `RESEND_API_KEY`/`TEENDNS_MAIL_FROM` reais em
 `/opt/teendns/.env`; sem eles o Compose recusa subir (`:?` obrigatório, mesmo
 padrão do `TEENDNS_ADMIN_TOKEN`).
+
+## Configuração por aparelho
+
+Hackathon: cada perfil ganhou no painel uma gaveta **CONFIGURAR UM APARELHO**
+que gera, sob `GET /api/v1/profiles/{id}/setup/`, arquivos de configuração
+calculados na hora:
+
+- `info` — valores neutros usados pela interface (nome do servidor, IP quando
+  conhecido, porta `853`, domínio de teste `example.com`);
+- `windows.bat` — instalador para **Windows 11 24H2+** (gate `lss 26100`):
+  autoelevação de administrador, DoT por perfil via
+  `netsh dns add encryption server=… dothost=…:853 autoupgrade=yes
+  udpfallback=no`, DNS do Edge desativado e teste de resolução. Versões
+  antigas abortam apontando a configuração manual — não há fallback para DNS
+  claro;
+- `windows-remove.bat` — desfaz a configuração;
+- `apple.mobileconfig` — perfil `com.apple.dnsSettings.managed` com
+  `DNSProtocol=TLS`, válido para iOS, iPadOS e macOS.
+
+Os arquivos não contêm dados pessoais: só nome do servidor, IP, porta e
+domínio de teste. Revogação continua sendo por rotação de hostname — o
+endereço antigo para de funcionar e as configurações geradas antes ficam
+órfãs.
+
+O IP público vem de `TEENDNS_DNS_PUBLIC_IP`. No staging, porque o apex
+`dns.lab.markun.com.br` não é resolvido publicamente (só o wildcard cobre
+subdomínios), o compose define
+`TEENDNS_DNS_PUBLIC_IP: ${TEENDNS_DNS_PUBLIC_IP:-178.105.202.118}` — o default
+é a própria VPS e pode ser sobrescrito no `.env`. Sem IP conhecido, o perfil
+Apple sai sem `ServerAddresses` e o instalador Windows recusa com `422`.
+
+O botão **JÁ INSTALOU? TESTAR** cria um desafio de pareamento e pergunta ao
+próprio DNS se algum aparelho do perfil respondeu
+(`GET /api/v1/pairing/challenges/{id}/outcome`, escopado por casa). Isso ainda
+não está publicado no staging — exigira uma promoção `main → production`.
 
 ## Verificações do primeiro deploy
 

@@ -24,10 +24,11 @@ type Config struct {
 }
 
 type House struct {
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	AdminTokenHash string `json:"admin_token_hash"`
-	Email          string `json:"email,omitempty"`
+	ID             string   `json:"id"`
+	Name           string   `json:"name"`
+	AdminTokenHash string   `json:"admin_token_hash"`
+	Email          string   `json:"email,omitempty"`
+	Emails         []string `json:"emails,omitempty"`
 }
 
 // Invitation is a single-use, expiring code an operator generates for a
@@ -67,6 +68,12 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.MaxTTL == 0 {
 		cfg.MaxTTL = 300
+	}
+	for houseIndex := range cfg.Houses {
+		house := &cfg.Houses[houseIndex]
+		if len(house.Emails) == 0 && house.Email != "" {
+			house.Emails = []string{house.Email}
+		}
 	}
 	for profileIndex := range cfg.Profiles {
 		for groupIndex := range cfg.Profiles[profileIndex].Groups {

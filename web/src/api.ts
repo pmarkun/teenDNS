@@ -67,6 +67,7 @@ export type HouseSummary = {
   id: string
   name: string
   email?: string
+  emails: string[]
   profile_count: number
 }
 
@@ -96,6 +97,18 @@ export type PairingStatus = {
   expires_at?: string
 }
 
+export type SetupInfo = {
+  hostname: string
+  ip?: string
+  port: string
+  test_domain: string
+}
+
+export type PairingOutcome = {
+  observed: boolean
+  profile_id?: string
+}
+
 export type YouthProfile = {
   label: string
   rules: Array<{ name: string; reason: string }>
@@ -105,7 +118,7 @@ const tokenKey = 'teendns-admin-token'
 const pairingTokenKey = 'teendns-pairing-token'
 
 export function getToken() {
-  return sessionStorage.getItem(tokenKey) || import.meta.env.VITE_ADMIN_TOKEN || ''
+  return sessionStorage.getItem(tokenKey) || ''
 }
 
 export function setToken(value: string) {
@@ -142,6 +155,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  async adminGuard() {
+    try {
+      await request<{ operator: boolean }>('/api/v1/admin/guard')
+      return true
+    } catch {
+      return false
+    }
+  },
   createInvitation(email: string) {
     return request<Invitation>('/api/v1/invitations', {
       method: 'POST',
@@ -166,6 +187,12 @@ export const api = {
   },
   deleteHouse(id: string) {
     return request<void>(`/api/v1/houses/${id}`, { method: 'DELETE' })
+  },
+  updateHouseEmails(id: string, emails: string[]) {
+    return request<{ id: string; email?: string; emails: string[] }>(`/api/v1/houses/${id}/emails`, {
+      method: 'PUT',
+      body: JSON.stringify({ emails }),
+    })
   },
   async listWaitlist() {
     const result = await request<{ waitlist: WaitlistEntry[] }>('/api/v1/waitlist')
@@ -224,6 +251,25 @@ export const api = {
   },
   pairingStatus(challengeID: string) {
     return request<PairingStatus>(`/api/v1/pairing/challenges/${challengeID}`)
+  },
+  pairingOutcome(challengeID: string) {
+    return request<PairingOutcome>(`/api/v1/pairing/challenges/${challengeID}/outcome`)
+  },
+  setupInfo(profileID: string) {
+    return request<SetupInfo>(`/api/v1/profiles/${profileID}/setup/info`)
+  },
+  async downloadSetupFile(profileID: string, kind: 'windows.bat' | 'windows-remove.bat' | 'apple.mobileconfig') {
+    const response = await fetch(`/api/v1/profiles/${profileID}/setup/${kind}`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}))
+      throw new Error(body.error || `Falha ${response.status}`)
+    }
+    const text = await response.text()
+    const disposition = response.headers.get('Content-Disposition') || ''
+    const match = disposition.match(/filename="([^"]+)"/)
+    return { filename: match ? match[1] : kind, text }
   },
   youthProfile(sessionToken: string) {
     return request<YouthProfile>('/api/v1/youth/profile', {

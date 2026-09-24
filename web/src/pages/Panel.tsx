@@ -1,13 +1,15 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
-import { Action, api, CatalogPackage, EventSummary, clearToken, getToken, Profile, RuleGroup, setToken } from '../api'
+import { Action, api, CatalogPackage, EventSummary, clearToken, getToken, PairingOutcome, Profile, RuleGroup, setToken, SetupInfo } from '../api'
 import { Drawer, Logo } from '../components'
+
+const wait = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds))
 
 export function Panel() {
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [packages, setPackages] = useState<CatalogPackage[]>([])
   const [selectedID, setSelectedID] = useState('')
   const [summary, setSummary] = useState<EventSummary | null>(null)
-  const [drawer, setDrawer] = useState<'group' | 'packages' | 'details' | 'advanced' | 'profile' | null>(null)
+  const [drawer, setDrawer] = useState<'group' | 'packages' | 'details' | 'advanced' | 'profile' | 'setup' | null>(null)
   const [editingGroup, setEditingGroup] = useState<RuleGroup | null>(null)
   const [status, setStatus] = useState('carregando')
   const [error, setError] = useState('')
@@ -107,6 +109,8 @@ export function Panel() {
             <button onClick={() => void navigator.clipboard.writeText(selected.hostname)}>COPIAR</button>
           </div>
 
+          <button className="setup-button" onClick={() => setDrawer('setup')}>CONFIGURAR UM APARELHO →</button>
+
           <div className="rules-heading"><h2>REGRAS, POR ENQUANTO</h2><span>{groups.length}</span></div>
           <div className="rule-list">
             {groups.map((group, index) => {
@@ -147,6 +151,7 @@ export function Panel() {
       {drawer === 'profile' && <ProfileDrawer onClose={() => setDrawer(null)} onCreated={(profile) => { setProfiles((all) => [...all, profile]); setSelectedID(profile.id); setDrawer(null) }} />}
       {drawer === 'details' && <DetailsDrawer summary={summary} onClose={() => setDrawer(null)} />}
       {drawer === 'advanced' && selected && <AdvancedDrawer profile={selected} onClose={() => setDrawer(null)} onRotated={(profile) => setProfiles((all) => all.map((item) => item.id === profile.id ? profile : item))} />}
+      {drawer === 'setup' && selected && <SetupDrawer profile={selected} onClose={() => setDrawer(null)} />}
       {error && <button className="toast" onClick={() => setError('')}>{error} ×</button>}
     </main>
   )
@@ -357,4 +362,133 @@ function AdvancedDrawer({ profile, onClose, onRotated }: { profile: Profile; onC
   const [busy, setBusy] = useState(false)
   async function rotate() { setBusy(true); onRotated(await api.rotate(profile.id)); setBusy(false) }
   return <Drawer title="PARTES NERDS" onClose={onClose}><div className="details"><p>Troque o endereço apenas se ele tiver sido compartilhado sem querer. Depois disso, o endereço anterior para de funcionar.</p><code>{profile.hostname}</code><button className="button button--danger" disabled={busy} onClick={() => void rotate()}>{busy ? 'TROCANDO…' : 'GERAR OUTRO ENDEREÇO'}</button></div></Drawer>
+}
+
+type SetupKind = 'windows.bat' | 'windows-remove.bat' | 'apple.mobileconfig'
+type TestState = 'idle' | 'running' | 'ok' | 'other' | 'timeout' | 'error'
+
+function SetupDrawer({ profile, onClose }: { profile: Profile; onClose: () => void }) {
+  const [info, setInfo] = useState<SetupInfo | null>(null)
+  const [error, setError] = useState('')
+  const [busyKind, setBusyKind] = useState<SetupKind | ''>('')
+  const [testState, setTestState] = useState<TestState>('idle')
+  const [testMessage, setTestMessage] = useState('')
+
+  useEffect(() => {
+    api.setupInfo(profile.id)
+      .then(setInfo)
+      .catch((cause) => setError(cause instanceof Error ? cause.message : 'Configuração indisponível'))
+  }, [profile.id])
+
+  async function download(kind: SetupKind) {
+    setBusyKind(kind)
+    setError('')
+    try {
+      const file = await api.downloadSetupFile(profile.id, kind)
+      const url = URL.createObjectURL(new Blob([file.text], { type: 'text/plain' }))
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = file.filename
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(url)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível baixar o arquivo')
+    } finally {
+      setBusyKind('')
+    }
+  }
+
+  async function runTest() {
+    setTestState('running')
+    setTestMessage('')
+    setError('')
+    try {
+      const challenge = await api.createPairingChallenge()
+      const image = new Image()
+      image.referrerPolicy = 'no-referrer'
+      image.src = `https://${challenge.dns_name}/check.gif?t=${Date.now()}`
+      for (let count = 0; count < 30; count += 1) {
+        await wait(1_500)
+        const outcome: PairingOutcome = await api.pairingOutcome(challenge.id)
+        if (!outcome.observed) continue
+        if (outcome.profile_id === profile.id) {
+          setTestState('ok')
+          setTestMessage(`Configuração funcionando: um aparelho respondeu pelo DNS de ${profile.label || profile.id}.`)
+        } else {
+          setTestState('other')
+          setTestMessage(outcome.profile_id
+            ? `Outro perfil respondeu (${outcome.profile_id}). Este aparelho ainda não está usando o DNS deste perfil.`
+            : 'Outro aparelho respondeu por um perfil diferente.')
+        }
+        return
+      }
+      setTestState('timeout')
+      setTestMessage('Nenhum aparelho respondeu ainda. Confira se o aparelho configurou o DNS teenDNS desta casa.')
+    } catch (cause) {
+      setTestState('error')
+      setTestMessage(cause instanceof Error ? cause.message : 'Não foi possível testar a conexão')
+    }
+  }
+
+  return <Drawer title="CONFIGURAR UM APARELHO" onClose={onClose}>
+    <div className="setup-intro">
+      <p>Cada aparelho da casa recebe só o endereço do DNS — sem login e sem histórico. Trocar de aparelho não muda nada no painel.</p>
+    </div>
+    {error && <p className="form-error" role="alert">{error}</p>}
+
+    <section className="setup-device">
+      <h3>WINDOWS</h3>
+      <p>Para Windows 11, versão 24H2 ou mais nova. O arquivo aplica o DNS seguro (DoT) sozinho e pede confirmação de administrador.</p>
+      <div className="setup-downloads">
+        <button className="button button--ink" disabled={busyKind === 'windows.bat'} onClick={() => void download('windows.bat')}>{busyKind === 'windows.bat' ? 'GERANDO…' : 'BAIXAR INSTALADOR (.bat)'}</button>
+        <button className="button button--outline" disabled={busyKind === 'windows-remove.bat'} onClick={() => void download('windows-remove.bat')}>{busyKind === 'windows-remove.bat' ? 'GERANDO…' : 'BAIXAR REMOVIDOR (.bat)'}</button>
+      </div>
+      <small>Em versões antigas do Windows o instalador não roda — aí vale a configuração manual de <b>OUTROS</b>.</small>
+    </section>
+
+    <section className="setup-device">
+      <h3>IPHONE, IPAD E MAC</h3>
+      <p>Baixe o perfil e instale nos Ajustes. {info && !info.ip ? 'Como este DNS não tem endereço IP fixo público, o perfil usa só o nome do servidor.' : ''}</p>
+      <div className="setup-downloads">
+        <button className="button button--ink" disabled={busyKind === 'apple.mobileconfig'} onClick={() => void download('apple.mobileconfig')}>{busyKind === 'apple.mobileconfig' ? 'GERANDO…' : 'BAIXAR PERFIL (.mobileconfig)'}</button>
+      </div>
+      <details><summary>passo a passo</summary><ol>
+        <li><b>iPhone/iPad:</b> toque em <b>Ajustes</b> → <b>Perfil baixado</b> → <b>Instalar</b>, confirmando com o código do aparelho se pedir.</li>
+        <li><b>Mac:</b> abra <b>Ajustes do Sistema</b> → <b>Perfis</b> (ou <b>Preferências do Sistema</b> → <b>Perfis</b>) → <b>Instalar</b>.</li>
+        <li>Pronto: o aparelho usa o DNS da casa em todas as redes.</li>
+      </ol></details>
+    </section>
+
+    {info && <section className="setup-device">
+      <h3>ANDROID</h3>
+      <p>Não precisa instalar nada. Nas <b>Configurações</b>, procure <b>DNS privado</b>, escolha <b>Nome do host do provedor de DNS</b> e cole:</p>
+      <div className="setup-copy"><code>{info.hostname}</code><button onClick={() => void navigator.clipboard.writeText(info.hostname)}>COPIAR</button></div>
+      <details><summary>passo a passo</summary><ol>
+        <li>Abra <b>Configurações</b> → <b>Rede e internet</b>.</li>
+        <li>Toque em <b>DNS privado</b> (em alguns aparelhos fica em <b>Wi-Fi</b> → rede atual → ícone de lápis).</li>
+        <li>Escolha <b>Nome do host do provedor de DNS</b> e cole o endereço acima.</li>
+      </ol></details>
+    </section>}
+
+    {info && <section className="setup-device">
+      <h3>OUTROS (LINUX, ROTEADOR)</h3>
+      <p>Configure o servidor DNS manualmente com os valores abaixo.{info.ip ? '' : ' Este DNS não expõe IP fixo público — use só o nome do servidor se o cliente suportar.'}</p>
+      <dl className="setup-values">
+        <div><dt>Nome do servidor</dt><dd><code>{info.hostname}</code></dd></div>
+        {info.ip && <div><dt>Endereço IP</dt><dd><code>{info.ip}</code></dd></div>}
+        <div><dt>Porta</dt><dd><code>{info.port}</code></dd></div>
+        <div><dt>Domínio de teste</dt><dd><code>{info.test_domain}</code></dd></div>
+      </dl>
+      <small>Conexão criptografada (DoT): o nome do servidor é obrigatório na maioria dos clientes.</small>
+    </section>}
+
+    <section className="setup-test">
+      <h3>JÁ INSTALOU? TESTAR</h3>
+      <p>O teenDNS pergunta ao próprio DNS se um aparelho desta casa está por perto. Pode levar alguns segundos.</p>
+      <button className="button button--acid" disabled={testState === 'running'} onClick={() => void runTest()}>{testState === 'running' ? 'PERGUNTANDO…' : 'TESTAR CONEXÃO'}</button>
+      {testState !== 'idle' && testMessage && <p className={`setup-test--${testState}`} role="status">{testMessage}</p>}
+    </section>
+  </Drawer>
 }
