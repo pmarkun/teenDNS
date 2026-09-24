@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import csv
 import hashlib
 import io
@@ -550,7 +551,54 @@ def validate_service_pools() -> None:
             raise ValueError(f"unknown action in preset {preset['id']}: {actions}")
 
 
+def check_current_catalog() -> None:
+    checksum_path = OUTPUT / "SHA256SUMS"
+    for line in checksum_path.read_text().splitlines():
+        expected, relative = line.split(maxsplit=1)
+        path = OUTPUT / relative
+        actual = sha256(path.read_bytes())
+        if actual != expected:
+            raise ValueError(f"checksum mismatch: {relative}")
+
+    manifest = json.loads((OUTPUT / "manifest.json").read_text())
+    for relative, expected_count in manifest["counts"].items():
+        path = OUTPUT / relative
+        values = path.read_text().splitlines()
+        if values != sorted(set(values)):
+            raise ValueError(f"list is not sorted and unique: {relative}")
+        for value in values:
+            normalize_domain(value)
+        if len(values) != expected_count:
+            raise ValueError(
+                f"count mismatch for {relative}: {len(values)} != {expected_count}"
+            )
+        print(f"{relative}: {len(values)}")
+
+    pools = json.loads((OUTPUT / "service-pools.json").read_text())
+    for service_id, pool in pools["services"].items():
+        values = (OUTPUT / pool["domain_source"]).read_text().splitlines()
+        if values != pool["domains"]:
+            raise ValueError(f"service pool mismatch: {service_id}")
+
+    presets = json.loads((OUTPUT / "presets.json").read_text())
+    known_actions = {"allow", "observe", "block"}
+    for preset in presets["presets"]:
+        if not set(preset["themes"].values()) <= known_actions:
+            raise ValueError(f"invalid preset actions: {preset['id']}")
+
+
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="validate the committed catalog without downloading or rewriting it",
+    )
+    arguments = parser.parse_args()
+    if arguments.check:
+        check_current_catalog()
+        return
+
     fetched_at = datetime.now(UTC).replace(microsecond=0).isoformat()
     validate_service_pools()
     spa_payload = fetch(SPA_URL)
