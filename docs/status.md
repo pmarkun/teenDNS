@@ -28,6 +28,17 @@ cd web && npm run lint && npm run build
 
 Resultado: todos passaram. A execução com detector de corridas não encontrou acesso concorrente inseguro na troca de políticas ou no gateway.
 
+Novos casos cobertos por testes:
+
+- `GET /api/v1/admin/guard` responde `200` para a chave do operador e `401`
+  sem token ou com chave de casa, e o bundle do site não embute mais token;
+- `PUT /api/v1/houses/{id}/emails` é rejeitado por chave de casa, valida
+  endereços, normaliza (trim, minúsculas, sem duplicados), persiste e mantém o
+  primeiro e-mail como principal;
+- magic link é aceito para qualquer e-mail da lista da casa (incluindo caixa
+  alta), sem cair na lista de espera;
+- a carga do `gateway.json` migra `email` → `emails` para casas existentes.
+
 ### Integração em containers
 
 ```text

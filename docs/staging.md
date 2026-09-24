@@ -105,6 +105,11 @@ correspondente.
 O `TEENDNS_ADMIN_TOKEN` continua sendo uma credencial operacional global do
 staging. Ele não deve ser entregue a famílias.
 
+O console `/admin` só abre o conteúdo para quem apresenta a chave correta: o
+próprio servidor valida o token em `GET /api/v1/admin/guard` antes de liberar
+qualquer lista, convite ou botão, e o bundle do site não embute mais token de
+operador. Abrir a rota sem a chave mostra apenas a tela de login.
+
 ## Login por e-mail (magic link)
 
 Em `/painel`, o login principal pede o e-mail da casa e manda um link de
@@ -118,7 +123,15 @@ em memória no processo do gateway — um restart derruba sessões de magic link
 ativas, mas o login por chave e um novo pedido de link continuam funcionando
 normalmente.
 
-O console `/admin` também lista as casas existentes (nome, e-mail, número de
+Uma casa pode ter vários e-mails de acesso. Além do endereço vindo do convite,
+o operador adiciona outros pelo botão **e-mails** de cada casa no console
+(`PUT /api/v1/houses/{id}/emails`): eles são normalizados, sem duplicados, e
+persistidos na casa dentro do `gateway.json`. Qualquer endereço da lista
+dispara o link de uso único para a mesma casa; o primeiro endereço é o que
+recebe o digest semanal. O registro antigo `email` continua sendo gravado como
+espelho do primeiro endereço.
+
+O console `/admin` também lista as casas existentes (nome, e-mails, número de
 perfis) com um botão de apagar que exige digitar o nome da casa para
 confirmar — a remoção é imediata e irreversível, e já apaga em cascata os
 perfis da casa e qualquer acumulado do digest semanal daquela casa.
