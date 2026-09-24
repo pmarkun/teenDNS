@@ -87,8 +87,8 @@ tempo real pelo painel.
 
 ## Convites e casas
 
-O operador gera um convite pelo painel em `/convidar` (autenticado com o
-`TEENDNS_ADMIN_TOKEN` global), informando o e-mail do responsável. O gateway
+O operador gera um convite pelo console de admin em `/admin` (autenticado com
+o `TEENDNS_ADMIN_TOKEN` global), informando o e-mail do responsável. O gateway
 cria um código de uso único válido por 7 dias, grava apenas o hash desse
 código no estado (`gateway.json`), e envia por e-mail via Resend um link para
 `/comecar?convite=<código>` com o código pré-preenchido. Se o envio falhar, a
@@ -104,6 +104,24 @@ correspondente.
 
 O `TEENDNS_ADMIN_TOKEN` continua sendo uma credencial operacional global do
 staging. Ele não deve ser entregue a famílias.
+
+## Login por e-mail (magic link)
+
+Em `/painel`, o login principal pede o e-mail da casa e manda um link de
+acesso de uso único (válido por 15 minutos), que vira uma sessão de 7 dias ao
+ser confirmado em `/entrar`. Nada disso toca a chave administrativa
+permanente da casa — ela continua funcionando como alternativa atrás de "ou
+cole sua chave administrativa". Um e-mail sem casa correspondente entra na
+lista de espera (`GET /api/v1/waitlist`, visível em `/admin`) em vez de
+receber um link. Todo esse estado (links pendentes e sessões ativas) vive só
+em memória no processo do gateway — um restart derruba sessões de magic link
+ativas, mas o login por chave e um novo pedido de link continuam funcionando
+normalmente.
+
+O console `/admin` também lista as casas existentes (nome, e-mail, número de
+perfis) com um botão de apagar que exige digitar o nome da casa para
+confirmar — a remoção é imediata e irreversível, e já apaga em cascata os
+perfis da casa e qualquer acumulado do digest semanal daquela casa.
 
 ## Digest semanal por e-mail
 

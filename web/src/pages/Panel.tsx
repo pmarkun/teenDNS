@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
-import { Action, api, CatalogPackage, EventSummary, getToken, Profile, RuleGroup, setToken } from '../api'
+import { Action, api, CatalogPackage, EventSummary, clearToken, getToken, Profile, RuleGroup, setToken } from '../api'
 import { Drawer, Logo } from '../components'
 
 export function Panel() {
@@ -62,6 +62,13 @@ export function Panel() {
     }
   }
 
+  function logout() {
+    clearToken()
+    setProfiles([])
+    setSelectedID('')
+    setAuthNeeded(true)
+  }
+
   if (authNeeded) return <Login error={error} onSuccess={load} />
 
   return (
@@ -69,8 +76,11 @@ export function Panel() {
       <header className="panel-header">
         <Logo />
         <nav><a href="/#como">entenda</a><a href="/meu-dns">visão jovem</a><a href="/#configurar">ajuda</a></nav>
-        <div className={`service-status ${status !== 'tá rodando' ? 'service-status--busy' : ''}`} aria-live="polite">
-          <i /> {status}
+        <div className="panel-header-actions">
+          <div className={`service-status ${status !== 'tá rodando' ? 'service-status--busy' : ''}`} aria-live="polite">
+            <i /> {status}
+          </div>
+          <button className="panel-logout" onClick={logout}>SAIR</button>
         </div>
       </header>
 
@@ -143,6 +153,68 @@ export function Panel() {
 }
 
 function Login({ error, onSuccess }: { error: string; onSuccess: () => Promise<void> }) {
+  const [mode, setMode] = useState<'email' | 'token'>('email')
+  return (
+    <main className="login">
+      <Logo />
+      {mode === 'email'
+        ? <EmailLogin onUseToken={() => setMode('token')} />
+        : <TokenLogin error={error} onSuccess={onSuccess} onBack={() => setMode('email')} />}
+    </main>
+  )
+}
+
+function EmailLogin({ onUseToken }: { onUseToken: () => void }) {
+  const [email, setEmail] = useState('')
+  const [status, setStatus] = useState<'idle' | 'sent' | 'waitlisted'>('idle')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      const result = await api.requestMagicLink(email)
+      setStatus(result.status === 'waitlisted' ? 'waitlisted' : 'sent')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível enviar o link')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (status === 'sent') {
+    return (
+      <div className="login-card">
+        <h1>CONFIRA SEU E-MAIL</h1>
+        <p>Mandamos um link de acesso para {email}. Ele funciona por 15 minutos.</p>
+      </div>
+    )
+  }
+  if (status === 'waitlisted') {
+    return (
+      <div className="login-card">
+        <h1>VOCÊ ENTROU NA LISTA</h1>
+        <p>Ainda não achamos uma casa com esse e-mail. Avisamos assim que houver um convite.</p>
+      </div>
+    )
+  }
+
+  return (
+    <form onSubmit={(event) => void submit(event)}>
+      <h1>ABRIR O PAINEL</h1>
+      <p>Informe o e-mail cadastrado na sua casa.</p>
+      <label>e-mail <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoFocus required /></label>
+      <button className="button button--ink" disabled={busy}>{busy ? 'ENVIANDO…' : 'ENVIAR LINK'}</button>
+      {error && <small>{error}</small>}
+      <button type="button" className="login-invite" onClick={onUseToken}>ou cole sua chave administrativa →</button>
+      <a className="login-invite" href="/comecar">tenho um convite →</a>
+    </form>
+  )
+}
+
+function TokenLogin({ error, onSuccess, onBack }: { error: string; onSuccess: () => Promise<void>; onBack: () => void }) {
   const [value, setValue] = useState('')
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -150,17 +222,14 @@ function Login({ error, onSuccess }: { error: string; onSuccess: () => Promise<v
     void onSuccess()
   }
   return (
-    <main className="login">
-      <Logo />
-      <form onSubmit={submit}>
-        <h1>ABRIR O PAINEL</h1>
-        <p>Use a chave administrativa da sua casa.</p>
-        <label>chave <input type="password" value={value} onChange={(event) => setValue(event.target.value)} autoFocus /></label>
-        <button className="button button--ink">ENTRAR</button>
-        {error && <small>{error}</small>}
-        <a className="login-invite" href="/comecar">tenho um convite →</a>
-      </form>
-    </main>
+    <form onSubmit={submit}>
+      <h1>COLAR CHAVE</h1>
+      <p>Use a chave administrativa da sua casa.</p>
+      <label>chave <input type="password" value={value} onChange={(event) => setValue(event.target.value)} autoFocus /></label>
+      <button className="button button--ink">ENTRAR</button>
+      {error && <small>{error}</small>}
+      <button type="button" className="login-invite" onClick={onBack}>← voltar para o e-mail</button>
+    </form>
   )
 }
 

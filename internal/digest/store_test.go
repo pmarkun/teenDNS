@@ -148,3 +148,36 @@ func TestCompleteDigestResetsOnlyGivenProfilesAndMarksSent(t *testing.T) {
 		t.Fatalf("expected p2 entries to survive reload, got %+v", report)
 	}
 }
+
+func TestForgetRemovesEntriesAndLastSentWithoutMarkingSent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "observations.json")
+	store, err := NewStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.Write(gateway.Event{ProfileID: "p1", Action: policy.ActionObserve, MatchedDomain: "discord.com", Timestamp: time.Now()})
+	store.Write(gateway.Event{ProfileID: "p2", Action: policy.ActionObserve, MatchedDomain: "roblox.com", Timestamp: time.Now()})
+	now := time.Now()
+	if err := store.CompleteDigest("house-1", []string{"p1"}, now); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.Forget("house-1", []string{"p1"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if !store.IsDue("house-1", now, time.Hour) {
+		t.Fatal("expected Forget to clear last-sent bookkeeping for the deleted house")
+	}
+	if report := store.Digest([]string{"p2"}); len(report) != 1 {
+		t.Fatalf("expected an unrelated profile to survive Forget, got %+v", report)
+	}
+
+	reloaded, err := NewStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reloaded.IsDue("house-1", now, time.Hour) {
+		t.Fatal("expected Forget to persist across reload")
+	}
+}

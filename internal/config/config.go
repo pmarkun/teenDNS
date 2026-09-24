@@ -19,6 +19,7 @@ type Config struct {
 	MaxTTL      uint32           `json:"max_ttl"`
 	Houses      []House          `json:"houses,omitempty"`
 	Invitations []Invitation     `json:"invitations,omitempty"`
+	Waitlist    []WaitlistEntry  `json:"waitlist,omitempty"`
 	Profiles    []policy.Profile `json:"profiles"`
 }
 
@@ -39,6 +40,13 @@ type Invitation struct {
 	CreatedAt time.Time  `json:"created_at"`
 	ExpiresAt time.Time  `json:"expires_at"`
 	UsedAt    *time.Time `json:"used_at,omitempty"`
+}
+
+// WaitlistEntry records an email that asked for access before any house
+// existed for it, so an operator can follow up with an invitation later.
+type WaitlistEntry struct {
+	Email     string    `json:"email"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 func Load(path string) (Config, error) {
