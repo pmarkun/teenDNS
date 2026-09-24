@@ -173,11 +173,12 @@ domínio de teste. Revogação continua sendo por rotação de hostname — o
 endereço antigo para de funcionar e as configurações geradas antes ficam
 órfãs.
 
-O IP público vem de `TEENDNS_DNS_PUBLIC_IP`; sem ele o gateway resolve o apex
-do wildcard (`*.dns.lab.markun.com.br` → a própria VPS) na inicialização. Quando
-o IP não é conhecido, o perfil Apple sai sem `ServerAddresses` e o instalador
-Windows recusa com `422`. Em produção a VPS deve rodar com
-`TEENDNS_DNS_PUBLIC_IP=178.105.202.118` ou confiar na resolução do apex.
+O IP público vem de `TEENDNS_DNS_PUBLIC_IP`. No staging, porque o apex
+`dns.lab.markun.com.br` não é resolvido publicamente (só o wildcard cobre
+subdomínios), o compose define
+`TEENDNS_DNS_PUBLIC_IP: ${TEENDNS_DNS_PUBLIC_IP:-178.105.202.118}` — o default
+é a própria VPS e pode ser sobrescrito no `.env`. Sem IP conhecido, o perfil
+Apple sai sem `ServerAddresses` e o instalador Windows recusa com `422`.
 
 O botão **JÁ INSTALOU? TESTAR** cria um desafio de pareamento e pergunta ao
 próprio DNS se algum aparelho do perfil respondeu
