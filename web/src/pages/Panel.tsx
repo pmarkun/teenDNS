@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
-import { Action, api, CatalogPackage, EventSummary, getToken, Profile, RuleGroup, setToken } from '../api'
+import { Action, api, CatalogPackage, EventSummary, clearToken, getToken, Profile, RuleGroup, setToken } from '../api'
 import { Drawer, Logo } from '../components'
 
 export function Panel() {
@@ -62,6 +62,13 @@ export function Panel() {
     }
   }
 
+  function logout() {
+    clearToken()
+    setProfiles([])
+    setSelectedID('')
+    setAuthNeeded(true)
+  }
+
   if (authNeeded) return <Login error={error} onSuccess={load} />
 
   return (
@@ -69,8 +76,11 @@ export function Panel() {
       <header className="panel-header">
         <Logo />
         <nav><a href="/#como">entenda</a><a href="/meu-dns">visão jovem</a><a href="/#configurar">ajuda</a></nav>
-        <div className={`service-status ${status !== 'tá rodando' ? 'service-status--busy' : ''}`} aria-live="polite">
-          <i /> {status}
+        <div className="panel-header-actions">
+          <div className={`service-status ${status !== 'tá rodando' ? 'service-status--busy' : ''}`} aria-live="polite">
+            <i /> {status}
+          </div>
+          <button className="panel-logout" onClick={logout}>SAIR</button>
         </div>
       </header>
 

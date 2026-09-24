@@ -92,6 +92,10 @@ export function setToken(value: string) {
   sessionStorage.setItem(tokenKey, value)
 }
 
+export function clearToken() {
+  sessionStorage.removeItem(tokenKey)
+}
+
 export function getPairingToken() {
   return sessionStorage.getItem(pairingTokenKey) || ''
 }

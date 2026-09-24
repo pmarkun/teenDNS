@@ -199,9 +199,12 @@ h1, h2, h3, .button, .logo { font-family: 'Barlow Condensed', Impact, 'Arial Nar
 }
 .panel-header nav { display: flex; gap: 65px; justify-content: center; font-weight: 800; }
 .panel-header nav a { text-underline-offset: 5px; text-decoration-thickness: 2px; }
+.panel-header-actions { display: flex; align-items: center; gap: 16px; }
 .service-status { display: flex; align-items: center; gap: 12px; padding: 7px 10px; background: var(--acid); font-family: 'Barlow Condensed'; font-size: 22px; font-weight: 800; }
 .service-status i { width: 14px; height: 14px; border-radius: 50%; background: #0bc834; }
 .service-status--busy { background: var(--paper); }
+.panel-logout { padding: 7px 14px; border: 2px solid var(--ink); background: var(--paper); font-family: 'Barlow Condensed'; font-size: 20px; font-weight: 800; cursor: pointer; }
+.panel-logout:hover { background: var(--ink); color: var(--paper); }
 .service-status--busy i { background: var(--red); }
 
 .profiles { position: relative; padding: 50px 30px; border-right: 3px solid var(--ink); }
