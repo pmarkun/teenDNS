@@ -10,7 +10,7 @@ export function Panel() {
   const [editingGroup, setEditingGroup] = useState<RuleGroup | null>(null)
   const [status, setStatus] = useState('carregando')
   const [error, setError] = useState('')
-  const [authNeeded, setAuthNeeded] = useState(!getToken())
+  const [authNeeded, setAuthNeeded] = useState(() => !getToken())
 
   const selected = useMemo(
     () => profiles.find((profile) => profile.id === selectedID) || profiles.find((profile) => !profile.disabled),
@@ -35,7 +35,9 @@ export function Panel() {
     }
   }, [])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    if (getToken()) void load()
+  }, [load])
   useEffect(() => {
     if (!selected) return
     void api.summary(selected.id).then(setSummary).catch(() => setSummary(null))
