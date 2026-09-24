@@ -18,12 +18,17 @@ import (
 	"github.com/pmarkun/teendns/internal/digest"
 	"github.com/pmarkun/teendns/internal/fixture"
 	"github.com/pmarkun/teendns/internal/gateway"
+	"github.com/pmarkun/teendns/internal/magiclink"
 	"github.com/pmarkun/teendns/internal/mail"
 	"github.com/pmarkun/teendns/internal/pairing"
 	"github.com/pmarkun/teendns/internal/policy"
 )
 
-const digestInterval = 7 * 24 * time.Hour
+const (
+	digestInterval  = 7 * 24 * time.Hour
+	magicLinkTTL    = 15 * time.Minute
+	magicSessionTTL = 7 * 24 * time.Hour
+)
 
 func main() {
 	if len(os.Args) < 2 {
@@ -73,6 +78,7 @@ func runGateway(arguments []string) {
 	}
 	mailSender := mail.NewResendClient(os.Getenv("RESEND_API_KEY"), os.Getenv("TEENDNS_MAIL_FROM"))
 	pairingManager := pairing.NewManager(*pairingSuffix, 2*time.Minute, time.Hour)
+	magicLinks := magiclink.NewManager(magicLinkTTL, magicSessionTTL)
 	server := gateway.NewServer(
 		cfg.Listen,
 		&tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS13},
@@ -82,7 +88,7 @@ func runGateway(arguments []string) {
 		gateway.MultiEventSink{gateway.NewEventWriter(os.Stdout), eventBuffer, digestStore},
 		pairingManager,
 	)
-	adminAPI, err := admin.NewServer(*configPath, cfg, profiles, eventBuffer, pairingManager, *hostnameSuffix, os.Getenv("TEENDNS_ADMIN_TOKEN"), mailSender)
+	adminAPI, err := admin.NewServer(*configPath, cfg, profiles, eventBuffer, pairingManager, magicLinks, digestStore, *hostnameSuffix, os.Getenv("TEENDNS_ADMIN_TOKEN"), mailSender)
 	if err != nil {
 		log.Fatalf("configure admin API: %v", err)
 	}

@@ -267,3 +267,22 @@ func (s *Store) CompleteDigest(houseID string, profileIDs []string, when time.Ti
 	s.lastSentAt[houseID] = when
 	return s.saveLocked()
 }
+
+// Forget removes accumulated entries and last-sent bookkeeping for a house
+// that is being deleted, so no observation data survives the account.
+func (s *Store) Forget(houseID string, profileIDs []string) error {
+	wanted := make(map[string]struct{}, len(profileIDs))
+	for _, id := range profileIDs {
+		wanted[id] = struct{}{}
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for storeKey := range s.entries {
+		if _, ok := wanted[storeKey.ProfileID]; ok {
+			delete(s.entries, storeKey)
+		}
+	}
+	delete(s.lastSentAt, houseID)
+	return s.saveLocked()
+}
