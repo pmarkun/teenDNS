@@ -7,6 +7,7 @@ Documentação técnica:
 - [Plano de execução](docs/plano-execucao.md)
 - [Estado da execução](docs/status.md)
 - [Laboratório local](docs/laboratorio.md)
+- [Staging real](docs/staging.md)
 - [Ameaças e limites](docs/ameacas-e-limites.md)
 - [Sistema visual](docs/design-system.md)
 
@@ -23,6 +24,15 @@ Documentação técnica:
 
 Alterações feitas no painel são validadas, gravadas em `.local/gateway.json` e
 ativadas em memória sem reiniciar o resolvedor.
+
+## Abrir o staging
+
+- página explicativa: <https://teendns.lab.markun.com.br>;
+- painel: <https://teendns.lab.markun.com.br/painel>;
+- visão do adolescente: <https://teendns.lab.markun.com.br/meu-dns>.
+
+O segredo administrativo do staging não é versionado. O endpoint DoT inicial é
+`p-piloto.dns.lab.markun.com.br`, na porta `853`.
 - [Critérios de classificação etária](docs/criterios-classificacao-etaria.md)
 - [Serviço de classificação de URLs](docs/classifier-service.md)
 

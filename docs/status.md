@@ -11,7 +11,7 @@ Atualizado em 23 de setembro de 2026. Branch: `codex/admin-web`.
 | M3 — Cache seguro | Concluído | Dois perfis usam uma consulta upstream; TTL é limitado; política recarrega atomicamente; CNAME não contorna bloqueio |
 | M4 — Autoprovisionamento | Concluído no laboratório | Painel cria perfis, edita regras, gira endpoints e ativa mudanças sem reiniciar o DNS; visão jovem pareia pelo DNS |
 | M5 — Camada educativa | Em andamento | Página pública e linguagem visual concluídas; pedido e contestação ainda pendentes |
-| M6 — Aparelho real | Pendente | Requer domínio, certificado público e staging na porta 853 |
+| M6 — Aparelho real | Staging pronto | Domínio público, wildcard TLS e gateway na porta 853 validados fora da rede local; aparelho Android real ainda pendente |
 | M7 — Piloto controlado | Pendente | Requer revisão de privacidade, autenticação e operação |
 
 ## Verificações executadas
@@ -125,4 +125,14 @@ Esses números descrevem apenas esta máquina e o upstream local em cache. Não 
 - autenticação multiusuário, recuperação de conta e autorização de produção;
 - persistência em PostgreSQL e retenção de eventos;
 - navegadores e aplicativos que forçam DoH próprio;
-- disponibilidade e recuperação em uma VPS real.
+- restauração completa depois de falha da VPS.
+
+## Staging público
+
+O primeiro deploy real está ativo em <https://teendns.lab.markun.com.br>. O
+gateway DoT usa `*.dns.lab.markun.com.br:853`, certificado público e Unbound
+recursivo. A implantação é um projeto Compose isolado na VPS compartilhada com o
+Farol Lab; detalhes operacionais e de renovação estão em [staging.md](staging.md).
+
+Continuam pendentes o teste em Android físico, a renovação automática do
+wildcard e exercícios de restauração depois de falha da VPS.
