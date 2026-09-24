@@ -144,8 +144,7 @@ Esses números descrevem apenas esta máquina e o upstream local em cache. Não 
 
 ## Limites ainda não validados
 
-- Android real, rede móvel e diferentes fabricantes;
-- certificado público e wildcard em staging;
+- rede móvel, outros fabricantes e reteste do app com o pool ampliado;
 - resolvedor recursivo contra a internet real sob carga;
 - IPv6;
 - cadeias DNAME e outros tipos DNS além de CNAME;
@@ -161,5 +160,5 @@ gateway DoT usa `*.dns.lab.markun.com.br:853`, certificado público e Unbound
 recursivo. A implantação é um projeto Compose isolado na VPS compartilhada com o
 Farol Lab; detalhes operacionais e de renovação estão em [staging.md](staging.md).
 
-Continuam pendentes o teste em Android físico, a renovação automática do
-wildcard e exercícios de restauração depois de falha da VPS.
+Continuam pendentes o reteste do app com o pool ampliado, a renovação automática
+do wildcard e exercícios de restauração depois de falha da VPS.

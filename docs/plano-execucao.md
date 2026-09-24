@@ -1,5 +1,9 @@
 # Plano de execução — MVP teenDNS
 
+> Documento histórico de arquitetura e fases. Para o que está implementado e
+> validado hoje, consulte [status.md](status.md); para começar, use o
+> [README do projeto](../README.md).
+
 Versão inicial: 23 de setembro de 2026.
 
 Estado atual: M1 a M4 concluídos no laboratório local. A página explicativa da
