@@ -1,3 +1,6 @@
 .direnv/
 .local/
 result
+web/node_modules/
+web/dist/
+web/*.tsbuildinfo

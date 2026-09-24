@@ -16,7 +16,7 @@
           "domain": "blocked.test",
           "include_subdomains": true,
           "action": "block",
-          "category": "demo",
+          "category": "gambling",
           "reason": "Categoria bloqueada no perfil da Ana"
         },
         {
@@ -24,6 +24,26 @@
           "action": "allow",
           "category": "education",
           "reason": "Exceção escolar mais específica"
+        },
+        {
+          "domain": "adult.test",
+          "include_subdomains": true,
+          "action": "block",
+          "category": "adult",
+          "reason": "Conteúdo adulto protegido pelo acordo da família"
+        },
+        {
+          "domain": "tracking.test",
+          "include_subdomains": true,
+          "action": "observe",
+          "category": "tracking",
+          "reason": "Observar serviços que acompanham atividade entre sites"
+        },
+        {
+          "domain": "youtube.com",
+          "include_subdomains": true,
+          "action": "allow",
+          "reason": "Permitido pelo acordo da família"
         }
       ]
     },
