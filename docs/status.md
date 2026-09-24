@@ -1,6 +1,6 @@
 # Estado da execução
 
-Atualizado em 23 de setembro de 2026. Branch: `codex/admin-web`.
+Atualizado em 24 de setembro de 2026. Branch: `codex/admin-web`.
 
 ## Marcos
 
@@ -9,7 +9,7 @@ Atualizado em 23 de setembro de 2026. Branch: `codex/admin-web`.
 | M1 — DNS no laboratório | Concluído | Consulta DNS-over-TLS atravessa gateway e Unbound e recebe resposta determinística da fixture |
 | M2 — Mini-DNS por perfil | Concluído | Ana bloqueia `blocked.test`; Bia resolve o mesmo domínio pelo mesmo IP e porta |
 | M3 — Cache seguro | Concluído | Dois perfis usam uma consulta upstream; TTL é limitado; política recarrega atomicamente; CNAME não contorna bloqueio |
-| M4 — Autoprovisionamento | Concluído no staging | Convite cria casa isolada, primeiro perfil e 15 regras iniciais conforme o preset escolhido; painel edita regras, gira endpoints e ativa mudanças sem reiniciar o DNS |
+| M4 — Autoprovisionamento | Concluído no staging | Convite cria casa isolada e primeiro perfil; painel lista os 15 pacotes do catálogo, permite ligar, desligar ou mudar sua ação e ativa mudanças sem reiniciar o DNS |
 | M5 — Camada educativa | Em andamento | Página pública e linguagem visual concluídas; pedido e contestação ainda pendentes |
 | M6 — Aparelho real | Em validação | Android real usou DoT e bloqueou `instagram.com`; o app continuou por domínios auxiliares e recebeu agora o pool ampliado para novo teste |
 | M7 — Piloto controlado | Pendente | Requer revisão de privacidade, autenticação e operação |
@@ -54,6 +54,8 @@ Casos confirmados:
 - página pública e painel servidos pelo mesmo laboratório.
 - convite de uso único cria casa, chave administrativa e primeiro perfil;
 - chave de uma casa lista apenas seus perfis e recebe `404` para perfil alheio.
+- catálogo administrativo lista 15 pacotes prontos com contagem de domínios;
+- ligar e desligar um pacote altera a política ativa e persiste a configuração.
 
 ### Interface
 
@@ -78,6 +80,10 @@ Validação no navegador conectado:
   idade ou data de nascimento;
 - seletor de preset validado em Chromium emulado em `390 × 844` e `1440 × 900`,
   sem rolagem horizontal ou erros de console.
+- gaveta de pacotes validada no staging em `1440 × 900` e Chromium emulado em
+  `390 × 844`, com 15 pacotes, sem rolagem horizontal ou mensagens de console;
+- pacote `Threads` foi ligado e desligado pela API do staging e o estado inicial
+  desligado foi restaurado.
 
 ### Catálogo v1
 

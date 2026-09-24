@@ -91,6 +91,10 @@ staging. Ele não deve ser entregue a famílias.
   o convite piloto ativo;
 - novas casas recebem 15 regras iniciais conforme Acompanhado, Explorando ou
   Autonomia guiada;
+- o painel mostra os 15 pacotes prontos para qualquer perfil e permite ligar,
+  desligar ou mudar entre Proteger, Observar e Permitir em tempo real;
+- o ciclo de ligar e desligar o pacote `Threads` foi executado no perfil piloto
+  e o estado anterior foi restaurado;
 - o perfil piloto recebeu a regra Instagram com três sufixos específicos; os
   três responderam `NXDOMAIN` pelo DoT público, e o novo teste no app real ainda
   está pendente;
