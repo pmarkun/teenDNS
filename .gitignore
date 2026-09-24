@@ -1,5 +1,8 @@
 .direnv/
 .local/
+/secrets
+/tmp/
+/deploy/staging/.env
 result
 web/node_modules/
 web/dist/
