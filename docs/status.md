@@ -9,9 +9,9 @@ Atualizado em 23 de setembro de 2026. Branch: `codex/admin-web`.
 | M1 — DNS no laboratório | Concluído | Consulta DNS-over-TLS atravessa gateway e Unbound e recebe resposta determinística da fixture |
 | M2 — Mini-DNS por perfil | Concluído | Ana bloqueia `blocked.test`; Bia resolve o mesmo domínio pelo mesmo IP e porta |
 | M3 — Cache seguro | Concluído | Dois perfis usam uma consulta upstream; TTL é limitado; política recarrega atomicamente; CNAME não contorna bloqueio |
-| M4 — Autoprovisionamento | Concluído no laboratório | Convite cria casa isolada e primeiro perfil; painel edita regras, gira endpoints e ativa mudanças sem reiniciar o DNS; visão jovem pareia pelo DNS |
+| M4 — Autoprovisionamento | Concluído no staging | Convite cria casa isolada, primeiro perfil e 15 regras iniciais conforme o preset escolhido; painel edita regras, gira endpoints e ativa mudanças sem reiniciar o DNS |
 | M5 — Camada educativa | Em andamento | Página pública e linguagem visual concluídas; pedido e contestação ainda pendentes |
-| M6 — Aparelho real | Staging pronto | Domínio público, wildcard TLS e gateway na porta 853 validados fora da rede local; aparelho Android real ainda pendente |
+| M6 — Aparelho real | Em validação | Android real usou DoT e bloqueou `instagram.com`; o app continuou por domínios auxiliares e recebeu agora o pool ampliado para novo teste |
 | M7 — Piloto controlado | Pendente | Requer revisão de privacidade, autenticação e operação |
 
 ## Verificações executadas
@@ -74,6 +74,23 @@ Validação no navegador conectado:
   histórico na resposta da API;
 - mudança de `blocked.test` de `Proteger` para `Permitir` produziu resposta
   `NOERROR`; a restauração para `Proteger` voltou a produzir `NXDOMAIN`.
+- cadastro oferece Acompanhado, Explorando e Autonomia guiada sem armazenar
+  idade ou data de nascimento;
+- seletor de preset validado em Chromium emulado em `390 × 844` e `1440 × 900`,
+  sem rolagem horizontal ou erros de console.
+
+### Catálogo v1
+
+- 185 domínios de apostas e 92 de conteúdo adulto de fontes oficiais ou
+  regulatórias;
+- 13 pools editáveis por serviço, com 52 sufixos específicos e dependências
+  compartilhadas documentadas, mas excluídas do bloqueio;
+- Instagram cobre `instagram.com`, `cdninstagram.com` e `ig.me` sem bloquear
+  `fbcdn.net`, `fbsbx.com` ou a infraestrutura genérica da Meta;
+- 192.095 domínios de phishing e ransomware foram catalogados para uma futura
+  camada global compartilhada; não são duplicados dentro de cada perfil;
+- metodologia, fontes, licenças e protocolo de teste real estão em
+  [metodologia-catalogo-v1.md](metodologia-catalogo-v1.md).
 
 ### Carga local
 

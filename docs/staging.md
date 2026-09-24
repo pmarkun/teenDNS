@@ -89,5 +89,10 @@ staging. Ele não deve ser entregue a famílias.
   sessão pareada;
 - a rota `/comecar` respondeu `200` e rejeitou um convite inválido sem consumir
   o convite piloto ativo;
+- novas casas recebem 15 regras iniciais conforme Acompanhado, Explorando ou
+  Autonomia guiada;
+- o perfil piloto recebeu a regra Instagram com três sufixos específicos; os
+  três responderam `NXDOMAIN` pelo DoT público, e o novo teste no app real ainda
+  está pendente;
 - os três containers `teendns-unbound-1`, `teendns-gateway-1` e
   `teendns-web-1` permaneceram isolados dos containers do Farol Lab.
