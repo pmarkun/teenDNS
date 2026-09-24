@@ -107,7 +107,7 @@ export function Panel() {
                     <strong>{group.name}</strong>
                     <small>{domainCount} {domainCount === 1 ? 'domínio' : 'domínios'}</small>
                   </button>
-                  <select className={`action action--${group.action}`} value={group.action} onChange={(event) => void updateGroup(index, event.target.value as Action)} aria-label={`Ação para ${group.name}`}>
+                  <select name={`rule-${group.id}-action`} className={`action action--${group.action}`} value={group.action} onChange={(event) => void updateGroup(index, event.target.value as Action)} aria-label={`Ação para ${group.name}`}>
                     <option value="block">Proteger</option>
                     <option value="observe">Observar</option>
                     <option value="allow">Permitir</option>
@@ -258,7 +258,7 @@ function PackagesDrawer({ profile, packages, onClose, onSaved }: { profile: Prof
             <details><summary>por quê?</summary><p>{item.reason}</p></details>
           </div>
           <div className="package-controls">
-            {enabled && <select className={`package-action package-action--${action}`} value={action} onChange={(event) => void save(item, true, event.target.value as Action)} disabled={busy} aria-label={`Ação para o pacote ${item.name}`}>
+            {enabled && <select name={`package-${item.id}-action`} className={`package-action package-action--${action}`} value={action} onChange={(event) => void save(item, true, event.target.value as Action)} disabled={busy} aria-label={`Ação para o pacote ${item.name}`}>
               <option value="block">Proteger</option>
               <option value="observe">Observar</option>
               <option value="allow">Permitir</option>
