@@ -1,0 +1,216 @@
+{
+  "version": 1,
+  "generated_at": "2026-09-24T03:12:55+00:00",
+  "policy": {
+    "adult-content-regulators.txt": {
+      "category": "adult_content",
+      "default_action": "block",
+      "confidence": "regulator_identified"
+    },
+    "gambling-br-authorized.txt": {
+      "category": "gambling",
+      "default_action": "block",
+      "confidence": "official_register"
+    },
+    "security-threats.txt": {
+      "category": "security_threats",
+      "default_action": "block",
+      "confidence": "community_curated",
+      "scope": "phishing and ransomware"
+    },
+    "services/discord.txt": {
+      "category": "messaging_and_communities",
+      "service": "discord",
+      "default_action": "observe",
+      "confidence": "official_docs_manual_mapping"
+    },
+    "services/facebook.txt": {
+      "category": "social_platforms",
+      "service": "facebook",
+      "default_action": "observe",
+      "confidence": "official_docs_manual_mapping"
+    },
+    "services/instagram.txt": {
+      "category": "social_platforms",
+      "service": "instagram",
+      "default_action": "observe",
+      "confidence": "official_docs_manual_mapping"
+    },
+    "services/reddit.txt": {
+      "category": "social_platforms",
+      "service": "reddit",
+      "default_action": "observe",
+      "confidence": "official_docs_manual_mapping"
+    },
+    "services/roblox.txt": {
+      "category": "games_and_social_play",
+      "service": "roblox",
+      "default_action": "observe",
+      "confidence": "official_docs_manual_mapping"
+    },
+    "services/snapchat.txt": {
+      "category": "social_platforms",
+      "service": "snapchat",
+      "default_action": "observe",
+      "confidence": "official_docs_manual_mapping"
+    },
+    "services/telegram.txt": {
+      "category": "messaging_and_communities",
+      "service": "telegram",
+      "default_action": "observe",
+      "confidence": "official_docs_manual_mapping"
+    },
+    "services/threads.txt": {
+      "category": "social_platforms",
+      "service": "threads",
+      "default_action": "observe",
+      "confidence": "official_docs_manual_mapping"
+    },
+    "services/tiktok.txt": {
+      "category": "social_video",
+      "service": "tiktok",
+      "default_action": "observe",
+      "confidence": "official_docs_manual_mapping"
+    },
+    "services/twitch.txt": {
+      "category": "social_video",
+      "service": "twitch",
+      "default_action": "observe",
+      "confidence": "official_docs_manual_mapping"
+    },
+    "services/whatsapp.txt": {
+      "category": "messaging_and_communities",
+      "service": "whatsapp",
+      "default_action": "observe",
+      "confidence": "official_docs_manual_mapping"
+    },
+    "services/x.txt": {
+      "category": "social_platforms",
+      "service": "x",
+      "default_action": "observe",
+      "confidence": "official_docs_manual_mapping"
+    },
+    "services/youtube.txt": {
+      "category": "social_video",
+      "service": "youtube",
+      "default_action": "observe",
+      "confidence": "official_docs_manual_mapping"
+    }
+  },
+  "sources": [
+    {
+      "id": "spa-mf-authorized-betting",
+      "publisher": "Secretaria de Premios e Apostas, Ministerio da Fazenda",
+      "url": "https://www.gov.br/fazenda/pt-br/composicao/orgaos/secretaria-de-premios-e-apostas/transparencia-ativa-processos-de-autorizacao-de-apostas-de-quota-fixa/planilha-de-autorizacoes-1.csv",
+      "retrieved_at": "2026-09-24T03:12:55+00:00",
+      "sha256": "d33a7506fab3903926250175df1cf91f12e48f97ccd28829e771374db7e28b52",
+      "output": "gambling-br-authorized.txt"
+    },
+    {
+      "id": "ofcom-adult-enforcement",
+      "publisher": "Ofcom",
+      "url": "https://www.ofcom.org.uk/online-safety/protecting-children/enforcement-programme-to-protect-children-from-encountering-pornographic-content-through-the-use-of-age-assurance",
+      "retrieved_at": "2026-09-24T03:12:55+00:00",
+      "extraction": "manual from named adult services",
+      "output": "adult-content-regulators.txt"
+    },
+    {
+      "id": "eu-dsa-adult-vlops",
+      "publisher": "European Commission",
+      "url": "https://digital-strategy.ec.europa.eu/en/news/commission-designates-second-set-very-large-online-platforms-under-digital-services-act",
+      "retrieved_at": "2026-09-24T03:12:55+00:00",
+      "extraction": "manual from designated pornographic VLOPs",
+      "output": "adult-content-regulators.txt"
+    },
+    {
+      "id": "block-list-project-phishing",
+      "publisher": "The Block List Project",
+      "url": "https://blocklistproject.github.io/Lists/alt-version/phishing-nl.txt",
+      "retrieved_at": "2026-09-24T03:12:55+00:00",
+      "sha256": "fe48504cad11b592353e4f4412826967e109e28a4de1266202543481e4c7e967",
+      "license": "MIT",
+      "output": "security-threats.txt"
+    },
+    {
+      "id": "block-list-project-ransomware",
+      "publisher": "The Block List Project",
+      "url": "https://blocklistproject.github.io/Lists/alt-version/ransomware-nl.txt",
+      "retrieved_at": "2026-09-24T03:12:55+00:00",
+      "sha256": "6de3fb46da3bba95f8d7eb4149ea7ceeeb06891b7b7035fe74fc24e716aa2a48",
+      "license": "MIT",
+      "output": "security-threats.txt"
+    },
+    {
+      "id": "official-service-documentation",
+      "publisher": "Service providers",
+      "retrieved_at": "2026-09-24T03:12:55+00:00",
+      "extraction": "manual provider-specific suffix mapping; see service-pools.json evidence_urls",
+      "license": "factual domain identifiers only; no list copied",
+      "outputs": [
+        "services/discord.txt",
+        "services/facebook.txt",
+        "services/instagram.txt",
+        "services/reddit.txt",
+        "services/roblox.txt",
+        "services/snapchat.txt",
+        "services/telegram.txt",
+        "services/threads.txt",
+        "services/tiktok.txt",
+        "services/twitch.txt",
+        "services/whatsapp.txt",
+        "services/x.txt",
+        "services/youtube.txt"
+      ]
+    }
+  ],
+  "counts": {
+    "adult-content-regulators.txt": 92,
+    "gambling-br-authorized.txt": 185,
+    "security-threats.txt": 192095,
+    "services/discord.txt": 7,
+    "services/facebook.txt": 2,
+    "services/instagram.txt": 3,
+    "services/reddit.txt": 5,
+    "services/roblox.txt": 3,
+    "services/snapchat.txt": 4,
+    "services/telegram.txt": 4,
+    "services/threads.txt": 2,
+    "services/tiktok.txt": 7,
+    "services/twitch.txt": 3,
+    "services/whatsapp.txt": 2,
+    "services/x.txt": 4,
+    "services/youtube.txt": 6
+  },
+  "rejected": {
+    "security-threats.txt": {
+      "count": 24,
+      "entries": [
+        "324814-de-nutzung-angabe-konto_identity.transaktionssicherheit.bid",
+        "574835-de-prob-kenntnis-konto_identity.hilfeservice-personal.cf",
+        "bancoestado.cl.imagene.comun2008_nuevo.paglg.pers.wpks.xyz",
+        "bluewin_login_accountsmail.godaddysites.com",
+        "h_t_t_p_s.facebook.com.3s3s.ru",
+        "h_t_t_p_s.www.facebook.com.3s3s.ru",
+        "hack_king10.net23.net",
+        "microsoft_excel.de.downloadastro.com",
+        "microsoft_outlook2018.editor.multiscreensite.com",
+        "orange_identifiezvous1.godaddysites.com",
+        "orangefrofxmailsf_inbox.godaddysites.com",
+        "outlookupdate_team.editor.multiscreensite.com",
+        "securedlogin_documentview.tripod.com",
+        "wsignin_en_ca.7v6.purchaseid.mucnos.com",
+        "www.574835-de-prob-kenntnis-konto_identity.hilfeservice-personal.cf",
+        "www.bancoestado.cl.imagene.comun2008_nuevo.paglg.perss.html.marketiings.club",
+        "www.bancoestado.cl.imagenes.comun2008_nuevo.paglg.perss.html.litau.club",
+        "www.h_t_t_p_s.facebook.com.3s3s.ru",
+        "www.h_t_t_p_s.www.facebook.com.3s3s.ru",
+        "www.hack_king10.net23.net",
+        "www.securedlogin_documentview.tripod.com",
+        "www_calxa.economlcafederai.cf",
+        "yamail_108.godaddysites.com",
+        "ymail_102.godaddysites.com"
+      ],
+      "reason": "not a valid hostname under the teenDNS v1 grammar"
+    }
+  }
+}

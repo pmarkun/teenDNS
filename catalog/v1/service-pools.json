@@ -1,0 +1,279 @@
+{
+  "version": 1,
+  "generated_at": "2026-09-24T03:12:55+00:00",
+  "matching": "domain suffix, including the apex itself",
+  "default_action": "observe",
+  "warning": "Pools are best-effort service controls, not content ratings. Shared dependencies are excluded to reduce collateral blocking.",
+  "services": {
+    "discord": {
+      "label": "Discord",
+      "theme": "messaging_and_communities",
+      "domain_source": "services/discord.txt",
+      "domains": [
+        "dis.gd",
+        "discord.com",
+        "discord.gg",
+        "discord.gift",
+        "discord.media",
+        "discordapp.com",
+        "discordapp.net"
+      ],
+      "shared_dependencies_excluded": [
+        "googleapis.com",
+        "gstatic.com"
+      ],
+      "evidence_urls": [
+        "https://support.discord.com/hc/en-us/articles/360042987951-Discordapp-com-is-now-Discord-com",
+        "https://discord.com/developers/docs/reference"
+      ],
+      "confidence": "official_docs_manual_mapping"
+    },
+    "facebook": {
+      "label": "Facebook",
+      "theme": "social_platforms",
+      "domain_source": "services/facebook.txt",
+      "domains": [
+        "facebook.com",
+        "fb.com"
+      ],
+      "shared_dependencies_excluded": [
+        "facebook.net",
+        "fbcdn.net",
+        "fbsbx.com"
+      ],
+      "evidence_urls": [
+        "https://developers.facebook.com/docs/graph-api/overview/",
+        "https://www.facebook.com/help/"
+      ],
+      "confidence": "official_docs_manual_mapping"
+    },
+    "instagram": {
+      "label": "Instagram",
+      "theme": "social_platforms",
+      "domain_source": "services/instagram.txt",
+      "domains": [
+        "cdninstagram.com",
+        "ig.me",
+        "instagram.com"
+      ],
+      "shared_dependencies_excluded": [
+        "facebook.com",
+        "facebook.net",
+        "fbcdn.net",
+        "fbsbx.com"
+      ],
+      "evidence_urls": [
+        "https://developers.facebook.com/docs/instagram-platform/",
+        "https://help.instagram.com/"
+      ],
+      "confidence": "official_docs_manual_mapping"
+    },
+    "reddit": {
+      "label": "Reddit",
+      "theme": "social_platforms",
+      "domain_source": "services/reddit.txt",
+      "domains": [
+        "redd.it",
+        "reddit.com",
+        "redditmedia.com",
+        "redditspace.com",
+        "redditstatic.com"
+      ],
+      "shared_dependencies_excluded": [
+        "fastly.net"
+      ],
+      "evidence_urls": [
+        "https://developers.reddit.com/docs/capabilities/server/splash-screen",
+        "https://support.reddithelp.com/"
+      ],
+      "confidence": "official_docs_manual_mapping"
+    },
+    "roblox": {
+      "label": "Roblox",
+      "theme": "games_and_social_play",
+      "domain_source": "services/roblox.txt",
+      "domains": [
+        "rbxcdn.com",
+        "roblox.com",
+        "robloxapi.com"
+      ],
+      "shared_dependencies_excluded": [
+        "amazonaws.com",
+        "cloudfront.net",
+        "googleapis.com"
+      ],
+      "evidence_urls": [
+        "https://create.roblox.com/docs/cloud/open-cloud",
+        "https://en.help.roblox.com/hc/en-us/articles/203312840-Firewall-and-Router-Issues"
+      ],
+      "confidence": "official_docs_manual_mapping"
+    },
+    "snapchat": {
+      "label": "Snapchat",
+      "theme": "social_platforms",
+      "domain_source": "services/snapchat.txt",
+      "domains": [
+        "sc-cdn.net",
+        "snap.com",
+        "snapchat.com",
+        "snapkit.com"
+      ],
+      "shared_dependencies_excluded": [
+        "googleapis.com",
+        "gstatic.com"
+      ],
+      "evidence_urls": [
+        "https://developers.snap.com/",
+        "https://developers.snap.com/marketing-api/Ads-API/dynamic-product-ads"
+      ],
+      "confidence": "official_docs_manual_mapping"
+    },
+    "telegram": {
+      "label": "Telegram",
+      "theme": "messaging_and_communities",
+      "domain_source": "services/telegram.txt",
+      "domains": [
+        "t.me",
+        "telegram.me",
+        "telegram.org",
+        "telesco.pe"
+      ],
+      "shared_dependencies_excluded": [],
+      "evidence_urls": [
+        "https://core.telegram.org/api/links",
+        "https://core.telegram.org/bots/api"
+      ],
+      "confidence": "official_docs_manual_mapping"
+    },
+    "threads": {
+      "label": "Threads",
+      "theme": "social_platforms",
+      "domain_source": "services/threads.txt",
+      "domains": [
+        "threads.com",
+        "threads.net"
+      ],
+      "shared_dependencies_excluded": [
+        "facebook.com",
+        "facebook.net",
+        "fbcdn.net",
+        "fbsbx.com",
+        "instagram.com"
+      ],
+      "evidence_urls": [
+        "https://developers.facebook.com/docs/threads/",
+        "https://help.instagram.com/769983657850450"
+      ],
+      "confidence": "official_docs_manual_mapping"
+    },
+    "tiktok": {
+      "label": "TikTok",
+      "theme": "social_video",
+      "domain_source": "services/tiktok.txt",
+      "domains": [
+        "muscdn.com",
+        "musical.ly",
+        "tiktok.com",
+        "tiktokapis.com",
+        "tiktokcdn-eu.com",
+        "tiktokcdn.com",
+        "tiktokv.com"
+      ],
+      "shared_dependencies_excluded": [
+        "akamaized.net",
+        "byteimg.com",
+        "byteoversea.com",
+        "byteoversea.net",
+        "ibytedtos.com",
+        "ibyteimg.com",
+        "pstatp.com"
+      ],
+      "evidence_urls": [
+        "https://developers.tiktok.com/doc/content-posting-api-get-started/",
+        "https://support.tiktok.com/"
+      ],
+      "confidence": "official_docs_manual_mapping"
+    },
+    "twitch": {
+      "label": "Twitch",
+      "theme": "social_video",
+      "domain_source": "services/twitch.txt",
+      "domains": [
+        "jtvnw.net",
+        "twitch.tv",
+        "twitchcdn.net"
+      ],
+      "shared_dependencies_excluded": [
+        "amazonaws.com",
+        "cloudfront.net"
+      ],
+      "evidence_urls": [
+        "https://dev.twitch.tv/docs/embed/",
+        "https://help.twitch.tv/"
+      ],
+      "confidence": "official_docs_manual_mapping"
+    },
+    "whatsapp": {
+      "label": "WhatsApp",
+      "theme": "messaging_and_communities",
+      "domain_source": "services/whatsapp.txt",
+      "domains": [
+        "whatsapp.com",
+        "whatsapp.net"
+      ],
+      "shared_dependencies_excluded": [
+        "facebook.com",
+        "facebook.net",
+        "fbcdn.net",
+        "fbsbx.com"
+      ],
+      "evidence_urls": [
+        "https://developers.facebook.com/docs/whatsapp/",
+        "https://faq.whatsapp.com/"
+      ],
+      "confidence": "official_docs_manual_mapping"
+    },
+    "x": {
+      "label": "X",
+      "theme": "social_platforms",
+      "domain_source": "services/x.txt",
+      "domains": [
+        "t.co",
+        "twimg.com",
+        "twitter.com",
+        "x.com"
+      ],
+      "shared_dependencies_excluded": [],
+      "evidence_urls": [
+        "https://developer.x.com/en/docs/x-for-websites/overview",
+        "https://help.x.com/en/using-x/x-urls"
+      ],
+      "confidence": "official_docs_manual_mapping"
+    },
+    "youtube": {
+      "label": "YouTube",
+      "theme": "social_video",
+      "domain_source": "services/youtube.txt",
+      "domains": [
+        "googlevideo.com",
+        "youtu.be",
+        "youtube-nocookie.com",
+        "youtube.com",
+        "youtubei.googleapis.com",
+        "ytimg.com"
+      ],
+      "shared_dependencies_excluded": [
+        "ggpht.com",
+        "google.com",
+        "googleapis.com",
+        "googleusercontent.com",
+        "gstatic.com"
+      ],
+      "evidence_urls": [
+        "https://support.google.com/youtube/answer/171780",
+        "https://support.google.com/a/answer/6334001"
+      ],
+      "confidence": "official_docs_manual_mapping"
+    }
+  }
+}

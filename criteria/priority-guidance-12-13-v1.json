@@ -1,0 +1,79 @@
+{
+  "schema_version": "1.0.0",
+  "profile_id": "br-12-13-v1",
+  "taxonomy": "age-rating-v1.json",
+  "status": "classifier_design_input",
+  "provenance_note": "As definições são paráfrases operacionais do teenDNS baseadas no Guia do MJSP de 2025; não substituem o texto oficial nem uma decisão humana.",
+  "guidance": [
+    {
+      "rating": "14",
+      "default_action": "mediate",
+      "criteria": [
+        {"id": "A.5.1", "definition": "Representação de interrupção intencional de gravidez iniciada ou inequivocamente pretendida.", "signals": ["procedimento abortivo", "deslocamento para realizar aborto", "interrupção intencional da gravidez"]},
+        {"id": "A.5.2", "definition": "Exame médico de cadáver para determinar causa ou circunstâncias da morte, com procedimento ou lesões visíveis.", "signals": ["necropsia", "incisões em cadáver", "retirada ou exame de órgãos"]},
+        {"id": "A.5.3", "definition": "Conteúdo que associa consumo excessivo, ostentação ou exclusividade a felicidade, sucesso, autoestima ou aceitação social.", "signals": ["incentivo ao consumo impulsivo", "ostentação como valor pessoal", "humilhação por não possuir produto"]},
+        {"id": "A.5.4", "definition": "Intimidação psicológica intencional e repetida, inclusive digital, contra pessoa vulnerável ou estigmatizada.", "signals": ["humilhação repetida", "cyberbullying", "exclusão coordenada", "ameaças ou exposição vexatória"]},
+        {"id": "A.5.5", "definition": "Representação de inferiorização, hostilidade ou exclusão fundada em identidade, condição ou característica de uma pessoa ou grupo.", "signals": ["preconceito", "estereótipo degradante", "discriminação", "estigmatização"]},
+        {"id": "A.5.6", "definition": "Representação de morte deliberadamente assistida para abreviar sofrimento, distinguindo-a de suicídio sem assistência.", "signals": ["suicídio assistido", "eutanásia", "terceiro auxilia a produzir a morte"]},
+        {"id": "A.5.7", "definition": "Uso de pessoa em atividade sexual para benefício, vantagem, coerção ou remuneração de terceiros.", "signals": ["exploração sexual", "lucro obtido com ato sexual alheio", "coerção ou vulnerabilidade sexual"]},
+        {"id": "A.5.8", "definition": "Construção persistente ou intensa de ameaça e medo, com potencial elevado de perturbação emocional.", "signals": ["ameaça iminente", "terror intenso", "tensão prolongada", "pânico"]},
+        {"id": "A.5.9", "definition": "Morte provocada de modo deliberado por uma pessoa, criatura ou agente identificável.", "signals": ["homicídio", "execução", "assassinato", "ato intencional que causa morte"]},
+        {"id": "A.5.10", "definition": "Aplicação, defesa ou execução institucional de condenação à morte.", "signals": ["sentença de morte", "execução estatal", "pena capital"]},
+        {"id": "A.5.11", "definition": "Recrutamento, transporte, controle ou exploração de pessoas por fraude, ameaça, coerção ou abuso de vulnerabilidade.", "signals": ["tráfico humano", "venda ou transporte de pessoas", "exploração mediante coerção"]},
+        {"id": "B.5.1", "definition": "Apresentação que enfatiza o corpo, gestos ou comportamento com intenção erótica ou sexualizante.", "signals": ["sexualização visual", "poses eróticas", "foco sensual persistente"]},
+        {"id": "B.5.2", "definition": "Exposição visual de partes íntimas ou do corpo nu fora das condições de nudez não erótica admitidas em faixas menores.", "signals": ["genitais visíveis", "seios ou nádegas em contexto sexual", "nudez prolongada ou destacada"]},
+        {"id": "B.5.3", "definition": "Oferta, negociação ou representação de atividade sexual em troca de dinheiro, bens ou vantagem.", "signals": ["serviço sexual remunerado", "agenciamento", "anúncio de acompanhante com finalidade sexual"]},
+        {"id": "B.5.4", "definition": "Representação não explícita de ato sexual reconhecível, sem visualização inequívoca de penetração ou estimulação genital.", "signals": ["ato sexual não explícito", "movimentos de relação sexual", "sexo oral ou masturbação sem detalhe explícito"]},
+        {"id": "B.5.5", "definition": "Tratamento ostensivo, grosseiro ou degradante de sexualidade e intimidade, com impacto acima da mera linguagem chula.", "signals": ["sexualidade apresentada de forma degradante", "exposição sexual grosseira", "objetificação insistente"]},
+        {"id": "C.5.1", "definition": "Incentivo ou enaltecimento do consumo de álcool, tabaco ou outra droga lícita como benéfico, inofensivo ou necessário ao sucesso e diversão.", "signals": ["elogio ao consumo de álcool", "glamourização do tabaco", "droga lícita associada a felicidade"]},
+        {"id": "C.5.2", "definition": "Indicação contextual de que ocorreu consumo de droga ilícita sem mostrar diretamente o ato.", "signals": ["restos ou objetos de consumo", "efeitos sugeridos", "contexto inequívoco sem uso visível"]},
+        {"id": "C.5.3", "definition": "Relato verbal, escrito ou gestual de consumo ou tráfico de droga ilícita.", "signals": ["confissão de consumo", "descrição de tráfico", "relato de venda de droga"]},
+        {"id": "C.5.4", "definition": "Representação de participação em jogo de azar com aposta ou recompensa de valor, sem que a obra em si ofereça a aposta.", "signals": ["cassino", "bingo com prêmio", "caça-níquel", "corrida com aposta"]},
+        {"id": "D.5.1", "definition": "Funcionalidade que permite comprar, vender ou trocar produtos, serviços, créditos ou vantagens mediante valor real direto ou indireto.", "signals": ["checkout", "microtransação", "marketplace", "presente virtual comprado", "pay-to-win"]},
+        {"id": "D.5.2", "definition": "Comunicação direta entre usuários sem consentimento parental, aferição etária ou proteções seguras habilitadas por padrão.", "signals": ["mensagem privada aberta", "chamada com desconhecidos", "aceite livre de contatos", "chat entre menor e adulto"]},
+        {"id": "D.5.3", "definition": "IA generativa aberta em que o usuário pode solicitar textos, imagens, áudio ou vídeo de escopo amplo, fora de mediação educacional controlada.", "signals": ["prompt aberto", "geração livre de conteúdo", "chat generativo amplo", "criação sintética multimodal"]}
+      ]
+    },
+    {
+      "rating": "16",
+      "default_action": "protect",
+      "criteria": [
+        {"id": "A.6.1", "definition": "Incentivo ou glamourização de padrões corporais ou estéticos capazes de provocar dano físico ou psicológico.", "signals": ["glamourização de magreza extrema", "prática estética perigosa", "humilhação corporal com prescrição de risco"]},
+        {"id": "A.6.2", "definition": "Violência motivada por preconceito ou hostilidade contra grupo definido por identidade ou característica protegida.", "signals": ["ataque motivado por raça ou religião", "violência homofóbica ou transfóbica", "incitação violenta contra grupo"]},
+        {"id": "A.6.3", "definition": "Ato sexual imposto mediante violência, ameaça, incapacidade de consentir ou outra forma de coerção.", "signals": ["estupro", "coação sexual", "ato sexual sem consentimento", "grave ameaça sexual"]},
+        {"id": "A.6.4", "definition": "Remoção, destruição ou deformação grave de parte do corpo, com consequência física claramente identificável.", "signals": ["amputação", "desmembramento", "órgão ou membro removido", "deformação corporal grave"]},
+        {"id": "A.6.5", "definition": "Representação de ação deliberada para causar a própria morte, incluindo tentativa ou resultado consumado.", "signals": ["tentativa de suicídio", "método suicida", "morte autoinfligida intencional"]},
+        {"id": "A.6.6", "definition": "Imposição intencional de sofrimento físico ou mental intenso para punir, intimidar, obter informação ou exercer controle.", "signals": ["tortura física", "interrogatório com sofrimento", "punição cruel deliberada"]},
+        {"id": "A.6.7", "definition": "Violência exibida como rotina, humor ou entretenimento sem consequência proporcional, ou usada predominantemente para resolver conflitos.", "signals": ["violência banalizada", "agressão gratuita", "violência como diversão", "repetição sem consequência"]},
+        {"id": "A.6.8", "definition": "Representação ou descrição de ato sexual violento praticado contra criança ou adolescente.", "signals": ["abuso sexual infantil", "violência sexual contra adolescente", "coerção sexual de menor"]},
+        {"id": "B.6.1", "definition": "Cena longa, contundente ou verossímil de sexo não explícito, com forte ênfase em movimentos, reações ou nudez.", "signals": ["relação sexual prolongada", "orgasmo ou movimentos destacados", "sexo não explícito intenso"]},
+        {"id": "C.6.1", "definition": "Exibição inequívoca do ato de consumir droga ilícita ou de seus efeitos diretamente associados.", "signals": ["uso visível de droga ilícita", "inalação, injeção ou ingestão", "efeito entorpecente mostrado"]},
+        {"id": "C.6.2", "definition": "Incentivo, pressão ou instrução para que alguém consuma droga ilícita.", "signals": ["convite insistente ao uso", "persuasão para experimentar", "instrução de consumo"]},
+        {"id": "C.6.3", "definition": "Representação da fabricação, cultivo, preparação, distribuição ou comercialização de droga ilícita.", "signals": ["produção de droga", "laboratório clandestino", "venda ou distribuição", "logística de tráfico"]},
+        {"id": "D.6.1", "definition": "Funcionalidade que solicita ou possibilita compartilhar dados pessoais de modo relevante para identificação, perfilamento ou contato.", "signals": ["perfil público com dados pessoais", "envio de identificadores", "compartilhamento amplo de dados"]},
+        {"id": "D.6.2", "definition": "Funcionalidade que coleta, publica ou compartilha localização precisa ou em tempo real.", "signals": ["geolocalização contínua", "mapa de localização pública", "compartilhar local em tempo real"]},
+        {"id": "D.6.3", "definition": "Seleção algorítmica personalizada destinada a prolongar engajamento ou influenciar comportamento com base no perfil do usuário.", "signals": ["feed infinito personalizado", "recomendação comportamental", "conteúdo otimizado para retenção"]},
+        {"id": "D.6.4", "definition": "Alteração automática da aparência para aproximá-la de padrão estético idealizado, especialmente quando aplicada por padrão.", "signals": ["afinamento facial automático", "mudança corporal automática", "embelezamento padrão"]},
+        {"id": "D.6.5", "definition": "Design que incentiva uso prolongado ou retorno compulsivo por recompensas, sequências, pressão temporal ou ausência de ponto natural de parada.", "signals": ["rolagem infinita", "streak", "recompensa variável", "notificação insistente", "autoplay contínuo"]}
+      ]
+    },
+    {
+      "rating": "18",
+      "default_action": "protect",
+      "criteria": [
+        {"id": "A.7.1", "definition": "Conteúdo que enaltece, incentiva ou apresenta a violência como desejável, prazerosa ou solução preferencial.", "signals": ["incitação à violência", "agressor tratado como modelo", "violência celebrada"]},
+        {"id": "A.7.2", "definition": "Violência gráfica e hiper-realista com sofrimento extremo, vísceras, mutilação grave, esmagamento ou sadismo.", "signals": ["gore", "evisceração", "restos mortais detalhados", "violência sádica explícita"]},
+        {"id": "B.7.1", "definition": "Ato sexual inequívoco com visualização de órgãos sexuais, penetração ou estimulação genital explícita.", "signals": ["penetração visível", "sexo oral explícito", "masturbação com genitais visíveis"]},
+        {"id": "B.7.2", "definition": "Situação sexual de forte impacto, incluindo sexo grupal, incesto, fetiche violento, zoofilia, necrofilia ou práticas equivalentes.", "signals": ["sexo grupal", "incesto", "fetiche violento", "zoofilia", "necrofilia"]},
+        {"id": "C.7.1", "definition": "Incentivo ou enaltecimento do uso de droga ilícita como positivo, benéfico, desejável ou necessário.", "signals": ["glamourização de droga ilícita", "defesa do uso como solução", "incitação ao consumo"]},
+        {"id": "C.7.2", "definition": "Promoção ou incentivo direto à participação em apostas ou jogos de azar.", "signals": ["chamada para apostar", "promessa de ganho", "tutorial promocional de aposta", "bônus para primeira aposta"]},
+        {"id": "D.7.1", "definition": "Ferramenta capaz de gerar ou manipular conteúdo sexual, violento, discriminatório, ilegal ou clinicamente enganoso sem salvaguardas adequadas.", "signals": ["deepfake pornográfico", "gerador de violência explícita", "manipulação sexual de imagem", "simulação clínica enganosa"]},
+        {"id": "D.7.2", "definition": "Funcionalidade que oferece ou simula aposta, probabilidades e resultados segundo a lógica de jogos de azar.", "signals": ["aposta com moeda real", "simulador de cassino", "odds", "ranking voltado a apostar"]},
+        {"id": "D.7.3", "definition": "Interação ou recomendação que promove desafio, instrução ou conduta com risco de dano físico ou psicológico.", "signals": ["desafio de asfixia", "instrução de autoagressão", "privação de alimento", "produção de explosivo", "conduta perigosa viral"]},
+        {"id": "D.7.4", "definition": "Funcionalidade destinada a conectar pessoas para relacionamento romântico, namoro, encontro ou atividade sexual.", "signals": ["matching romântico", "aplicativo de encontros", "busca de parceiro sexual"]},
+        {"id": "D.7.5", "definition": "Compra com valor real de item ou vantagem virtual cujo conteúdo ou utilidade depende de resultado aleatório não conhecido previamente.", "signals": ["loot box", "gacha pago", "roleta com item virtual", "pacote aleatório comprado"]},
+        {"id": "D.7.6", "definition": "Publicidade, recomendação, oferta ou venda de produto, serviço ou conteúdo legalmente destinado a adultos.", "signals": ["pornografia", "serviço de acompanhante", "bebida alcoólica", "tabaco", "arma", "site de aposta"]}
+      ]
+    }
+  ]
+}

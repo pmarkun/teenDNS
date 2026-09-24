@@ -25,6 +25,40 @@
           "category": "education",
           "reason": "Exceção escolar mais específica"
         }
+      ],
+      "groups": [
+        {
+          "id": "gambling-br",
+          "name": "Apostas",
+          "action": "block",
+          "category": "gambling",
+          "reason": "Apostas usam dinheiro real e podem criar hábitos difíceis de controlar",
+          "domains": [],
+          "domain_source": "catalog/v1/gambling-br-authorized.txt"
+        },
+        {
+          "id": "adult",
+          "name": "Conteúdo adulto",
+          "action": "block",
+          "category": "adult",
+          "reason": "Conteúdo sexual explícito está fora do combinado deste perfil",
+          "domains": ["adult.test"]
+        },
+        {
+          "id": "tracking",
+          "name": "Rastreamento",
+          "action": "observe",
+          "category": "tracking",
+          "reason": "Serviços que acompanham atividade entre sites",
+          "domains": ["tracking.test"]
+        },
+        {
+          "id": "youtube",
+          "name": "youtube.com",
+          "action": "allow",
+          "reason": "Permitido pelo acordo da família",
+          "domains": ["youtube.com"]
+        }
       ]
     },
     {
@@ -33,7 +67,8 @@
       "hostname": "p-bia.dns.teendns.test",
       "default_action": "allow",
       "version": 1,
-      "rules": []
+      "rules": [],
+      "groups": []
     }
   ]
 }

@@ -36,6 +36,10 @@ type EventSink interface {
 	Write(Event)
 }
 
+type PairingObserver interface {
+	Observe(profileID, queryName string) bool
+}
+
 func NewEventWriter(writer io.Writer) *EventWriter {
 	return &EventWriter{encoder: json.NewEncoder(writer)}
 }
@@ -55,13 +59,14 @@ type Server struct {
 	upstream string
 	maxTTL   uint32
 	events   EventSink
+	pairings PairingObserver
 }
 
 type ProfileLookup interface {
 	Profile(hostname string) (policy.Profile, bool)
 }
 
-func NewServer(address string, tlsConfig *tls.Config, profiles ProfileLookup, upstream string, maxTTL uint32, events EventSink) *Server {
+func NewServer(address string, tlsConfig *tls.Config, profiles ProfileLookup, upstream string, maxTTL uint32, events EventSink, pairings PairingObserver) *Server {
 	return &Server{
 		address:  address,
 		tls:      tlsConfig,
@@ -69,6 +74,7 @@ func NewServer(address string, tlsConfig *tls.Config, profiles ProfileLookup, up
 		upstream: upstream,
 		maxTTL:   maxTTL,
 		events:   events,
+		pairings: pairings,
 	}
 }
 
@@ -137,6 +143,9 @@ func (s *Server) resolve(profile policy.Profile, request *dns.Msg) *dns.Msg {
 	}
 
 	question := request.Question[0]
+	if s.pairings != nil && s.pairings.Observe(profile.ID, question.Name) {
+		return blockedResponse(request)
+	}
 	decision, err := policy.Decide(profile, question.Name)
 	if err != nil {
 		response := new(dns.Msg)

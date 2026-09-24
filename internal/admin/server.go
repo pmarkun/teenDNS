@@ -1,22 +1,28 @@
 package admin
 
 import (
+	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base32"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/pmarkun/teendns/internal/config"
 	"github.com/pmarkun/teendns/internal/gateway"
+	"github.com/pmarkun/teendns/internal/pairing"
 	"github.com/pmarkun/teendns/internal/policy"
 )
 
@@ -26,19 +32,75 @@ type Server struct {
 	config         config.Config
 	profiles       *policy.Manager
 	events         *gateway.EventBuffer
+	pairings       *pairing.Manager
 	hostnameSuffix string
 	token          string
+	invitationKeys []string
+	catalogDir     string
 }
+
+type accessScope struct {
+	operator bool
+	houseID  string
+}
+
+type accessContextKey struct{}
 
 type profileRequest struct {
-	Label         string        `json:"label"`
-	DefaultAction policy.Action `json:"default_action"`
-	Rules         []policy.Rule `json:"rules"`
+	Label         string             `json:"label"`
+	DefaultAction policy.Action      `json:"default_action"`
+	Rules         []policy.Rule      `json:"rules"`
+	Groups        []policy.RuleGroup `json:"groups"`
 }
 
-func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, events *gateway.EventBuffer, hostnameSuffix, token string) (*Server, error) {
+type registrationRequest struct {
+	InvitationCode string `json:"invitation_code"`
+	HouseName      string `json:"house_name"`
+	ProfileName    string `json:"profile_name"`
+	Preset         string `json:"preset"`
+}
+
+type registrationResponse struct {
+	House      houseResponse  `json:"house"`
+	AdminToken string         `json:"admin_token"`
+	Profile    policy.Profile `json:"profile"`
+}
+
+type houseResponse struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type catalogPackageResponse struct {
+	ID              string        `json:"id"`
+	Name            string        `json:"name"`
+	Category        string        `json:"category"`
+	Reason          string        `json:"reason"`
+	DomainCount     int           `json:"domain_count"`
+	SuggestedAction policy.Action `json:"suggested_action"`
+}
+
+type packageRequest struct {
+	Enabled bool          `json:"enabled"`
+	Action  policy.Action `json:"action"`
+}
+
+type youthRule struct {
+	Name   string `json:"name"`
+	Reason string `json:"reason"`
+}
+
+type youthProfile struct {
+	Label string      `json:"label"`
+	Rules []youthRule `json:"rules"`
+}
+
+func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, events *gateway.EventBuffer, pairings *pairing.Manager, hostnameSuffix, token string) (*Server, error) {
 	if strings.TrimSpace(token) == "" {
 		return nil, errors.New("admin token is required")
+	}
+	if pairings == nil {
+		return nil, errors.New("pairing manager is required")
 	}
 	if hostnameSuffix == "" {
 		hostnameSuffix = "dns.teendns.test"
@@ -48,9 +110,20 @@ func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, e
 		config:         cloneConfig(cfg),
 		profiles:       profiles,
 		events:         events,
+		pairings:       pairings,
 		hostnameSuffix: strings.TrimSuffix(strings.ToLower(hostnameSuffix), "."),
 		token:          token,
+		invitationKeys: splitInvitationKeys(os.Getenv("TEENDNS_INVITATION_CODES")),
+		catalogDir:     environmentOrDefault("TEENDNS_CATALOG_DIR", "catalog/v1"),
 	}, nil
+}
+
+// Reload keeps the control plane in sync when an operator uses the legacy
+// SIGHUP configuration path.
+func (s *Server) Reload(cfg config.Config) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.config = cloneConfig(cfg)
 }
 
 func (s *Server) Handler() http.Handler {
@@ -58,16 +131,151 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", func(writer http.ResponseWriter, _ *http.Request) {
 		writeJSON(writer, http.StatusOK, map[string]string{"status": "ok"})
 	})
+	mux.HandleFunc("POST /api/v1/pairing/challenges", s.createPairingChallenge)
+	mux.HandleFunc("GET /api/v1/pairing/challenges/{id}", s.pairingChallengeStatus)
+	mux.HandleFunc("GET /api/v1/youth/profile", s.youthProfile)
+	mux.HandleFunc("POST /api/v1/houses", s.registerHouse)
+	mux.HandleFunc("GET /api/v1/catalog/packages", s.authorize(s.catalogPackages))
 	mux.HandleFunc("/api/v1/profiles", s.authorize(s.profilesCollection))
 	mux.HandleFunc("/api/v1/profiles/", s.authorize(s.profileResource))
 	return withCORS(mux)
+}
+
+func (s *Server) catalogPackages(writer http.ResponseWriter, _ *http.Request) {
+	groups, err := availablePackageGroups(s.catalogDir)
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, err)
+		return
+	}
+	packages := make([]catalogPackageResponse, 0, len(groups))
+	for _, group := range groups {
+		packages = append(packages, catalogPackageResponse{
+			ID: group.ID, Name: group.Name, Category: group.Category, Reason: group.Reason,
+			DomainCount: len(group.Domains), SuggestedAction: group.Action,
+		})
+	}
+	writeJSON(writer, http.StatusOK, map[string]any{"packages": packages})
+}
+
+func (s *Server) registerHouse(writer http.ResponseWriter, request *http.Request) {
+	var input registrationRequest
+	if err := decodeJSON(request, &input); err != nil {
+		writeError(writer, http.StatusBadRequest, err)
+		return
+	}
+	input.HouseName = strings.TrimSpace(input.HouseName)
+	input.ProfileName = strings.TrimSpace(input.ProfileName)
+	if input.HouseName == "" || input.ProfileName == "" {
+		writeError(writer, http.StatusBadRequest, errors.New("nome da casa e do primeiro perfil são obrigatórios"))
+		return
+	}
+	if len([]rune(input.HouseName)) > 80 || len([]rune(input.ProfileName)) > 80 {
+		writeError(writer, http.StatusBadRequest, errors.New("use nomes com até 80 caracteres"))
+		return
+	}
+	invitationKey := tokenHash(strings.TrimSpace(input.InvitationCode))
+	if !containsConstantTime(s.invitationKeys, invitationKey) {
+		writeError(writer, http.StatusForbidden, errors.New("convite inválido ou já usado"))
+		return
+	}
+	houseToken, err := randomToken()
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, err)
+		return
+	}
+	houseIDToken, err := randomToken()
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, err)
+		return
+	}
+	profileToken, err := randomToken()
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, err)
+		return
+	}
+	house := config.House{ID: houseIDToken[:12], Name: input.HouseName, AdminTokenHash: tokenHash(houseToken)}
+	groups, err := presetGroups(input.Preset, s.catalogDir)
+	if err != nil {
+		writeError(writer, http.StatusBadRequest, err)
+		return
+	}
+	profile := policy.Profile{
+		ID:            profileToken[:12],
+		HouseID:       house.ID,
+		Label:         input.ProfileName,
+		Hostname:      "p-" + profileToken + "." + s.hostnameSuffix,
+		DefaultAction: policy.ActionAllow,
+		Version:       1,
+		Rules:         []policy.Rule{},
+		Groups:        groups,
+	}
+	err = s.update(func(cfg *config.Config) error {
+		if slices.Contains(cfg.UsedInvitationKeys, invitationKey) {
+			return errors.New("convite inválido ou já usado")
+		}
+		cfg.UsedInvitationKeys = append(cfg.UsedInvitationKeys, invitationKey)
+		cfg.Houses = append(cfg.Houses, house)
+		cfg.Profiles = append(cfg.Profiles, profile)
+		return nil
+	})
+	if err != nil {
+		writeError(writer, http.StatusForbidden, err)
+		return
+	}
+	writer.Header().Set("Cache-Control", "no-store")
+	writeJSON(writer, http.StatusCreated, registrationResponse{
+		House: houseResponse{ID: house.ID, Name: house.Name}, AdminToken: houseToken, Profile: profile,
+	})
+}
+
+func (s *Server) createPairingChallenge(writer http.ResponseWriter, _ *http.Request) {
+	challenge, err := s.pairings.Create()
+	if err != nil {
+		writeError(writer, http.StatusServiceUnavailable, err)
+		return
+	}
+	writer.Header().Set("Cache-Control", "no-store")
+	writeJSON(writer, http.StatusCreated, challenge)
+}
+
+func (s *Server) pairingChallengeStatus(writer http.ResponseWriter, request *http.Request) {
+	status, ok := s.pairings.Status(request.PathValue("id"))
+	if !ok {
+		writeError(writer, http.StatusNotFound, errors.New("pairing challenge not found or expired"))
+		return
+	}
+	writer.Header().Set("Cache-Control", "no-store")
+	writeJSON(writer, http.StatusOK, status)
+}
+
+func (s *Server) youthProfile(writer http.ResponseWriter, request *http.Request) {
+	sessionToken := strings.TrimPrefix(request.Header.Get("Authorization"), "Bearer ")
+	profileID, ok := s.pairings.Profile(sessionToken)
+	if !ok {
+		writeError(writer, http.StatusUnauthorized, errors.New("invalid or expired pairing session"))
+		return
+	}
+	profile, ok := s.findProfile(profileID)
+	if !ok || profile.Disabled {
+		writeError(writer, http.StatusNotFound, errors.New("profile not found"))
+		return
+	}
+	result := youthProfile{Label: profile.Label, Rules: []youthRule{}}
+	for _, group := range profile.Groups {
+		if group.Action != policy.ActionBlock {
+			continue
+		}
+		result.Rules = append(result.Rules, youthRule{Name: group.Name, Reason: group.Reason})
+	}
+	writer.Header().Set("Cache-Control", "no-store")
+	writeJSON(writer, http.StatusOK, result)
 }
 
 func (s *Server) profilesCollection(writer http.ResponseWriter, request *http.Request) {
 	switch request.Method {
 	case http.MethodGet:
 		s.mu.RLock()
-		profiles := append([]policy.Profile(nil), s.config.Profiles...)
+		profiles := filterProfiles(s.config.Profiles, requestScope(request))
 		s.mu.RUnlock()
 		writeJSON(writer, http.StatusOK, map[string]any{"profiles": profiles})
 	case http.MethodPost:
@@ -88,11 +296,13 @@ func (s *Server) profilesCollection(writer http.ResponseWriter, request *http.Re
 		}
 		profile := policy.Profile{
 			ID:            token[:12],
+			HouseID:       requestScope(request).houseID,
 			Label:         input.Label,
 			Hostname:      "p-" + token + "." + s.hostnameSuffix,
 			DefaultAction: policy.ActionAllow,
 			Version:       1,
 			Rules:         []policy.Rule{},
+			Groups:        []policy.RuleGroup{},
 		}
 		if err := s.update(func(cfg *config.Config) error {
 			cfg.Profiles = append(cfg.Profiles, profile)
@@ -116,12 +326,21 @@ func (s *Server) profileResource(writer http.ResponseWriter, request *http.Reque
 		return
 	}
 	id := parts[0]
+	profile, ok := s.findProfile(id)
+	if !ok || !scopeAllows(requestScope(request), profile) {
+		writeError(writer, http.StatusNotFound, errors.New("profile not found"))
+		return
+	}
 	if len(parts) == 2 && parts[1] == "rotate-endpoint" && request.Method == http.MethodPost {
 		s.rotateEndpoint(writer, id)
 		return
 	}
 	if len(parts) == 2 && parts[1] == "summary" && request.Method == http.MethodGet {
 		writeJSON(writer, http.StatusOK, s.events.Summary(id))
+		return
+	}
+	if len(parts) == 3 && parts[1] == "packages" && request.Method == http.MethodPut {
+		s.updateProfilePackage(writer, request, id, parts[2])
 		return
 	}
 	if len(parts) != 1 {
@@ -131,11 +350,6 @@ func (s *Server) profileResource(writer http.ResponseWriter, request *http.Reque
 
 	switch request.Method {
 	case http.MethodGet:
-		profile, ok := s.findProfile(id)
-		if !ok {
-			writeError(writer, http.StatusNotFound, errors.New("profile not found"))
-			return
-		}
 		writeJSON(writer, http.StatusOK, profile)
 	case http.MethodPut:
 		var input profileRequest
@@ -158,6 +372,13 @@ func (s *Server) profileResource(writer http.ResponseWriter, request *http.Reque
 			}
 			profile.DefaultAction = input.DefaultAction
 			profile.Rules = append([]policy.Rule(nil), input.Rules...)
+			if input.Groups != nil {
+				groups, err := mergeGroups(profile.Groups, input.Groups)
+				if err != nil {
+					return err
+				}
+				profile.Groups = groups
+			}
 			profile.Version++
 			updated = *profile
 			return nil
@@ -196,6 +417,62 @@ func (s *Server) profileResource(writer http.ResponseWriter, request *http.Reque
 		writer.Header().Set("Allow", "GET, PUT, DELETE")
 		writeError(writer, http.StatusMethodNotAllowed, errors.New("method not allowed"))
 	}
+}
+
+func (s *Server) updateProfilePackage(writer http.ResponseWriter, request *http.Request, profileID, packageID string) {
+	var input packageRequest
+	if err := decodeJSON(request, &input); err != nil {
+		writeError(writer, http.StatusBadRequest, err)
+		return
+	}
+	packages, err := availablePackageGroups(s.catalogDir)
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, err)
+		return
+	}
+	packageIndex := slices.IndexFunc(packages, func(group policy.RuleGroup) bool { return group.ID == packageID })
+	if packageIndex < 0 {
+		writeError(writer, http.StatusNotFound, errors.New("pacote não encontrado"))
+		return
+	}
+	if input.Action == "" {
+		input.Action = packages[packageIndex].Action
+	}
+	if !validPackageAction(input.Action) {
+		writeError(writer, http.StatusBadRequest, errors.New("ação inválida"))
+		return
+	}
+	var updated policy.Profile
+	err = s.update(func(cfg *config.Config) error {
+		profile, ok := profileByID(cfg.Profiles, profileID)
+		if !ok {
+			return os.ErrNotExist
+		}
+		index := slices.IndexFunc(profile.Groups, func(group policy.RuleGroup) bool { return group.ID == packageID })
+		if !input.Enabled {
+			if index >= 0 {
+				profile.Groups = append(profile.Groups[:index], profile.Groups[index+1:]...)
+			}
+		} else if index >= 0 && len(profile.Groups[index].Domains) > 0 {
+			profile.Groups[index].Action = input.Action
+		} else {
+			group := packages[packageIndex]
+			group.Action = input.Action
+			if index >= 0 {
+				profile.Groups[index] = group
+			} else {
+				profile.Groups = append(profile.Groups, group)
+			}
+		}
+		profile.Version++
+		updated = *profile
+		return nil
+	})
+	if err != nil {
+		writeError(writer, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(writer, http.StatusOK, updated)
 }
 
 func (s *Server) rotateEndpoint(writer http.ResponseWriter, id string) {
@@ -270,14 +547,252 @@ func profileByID(profiles []policy.Profile, id string) (*policy.Profile, bool) {
 	return &profiles[index], true
 }
 
+func mergeGroups(existing, incoming []policy.RuleGroup) ([]policy.RuleGroup, error) {
+	known := make(map[string]policy.RuleGroup, len(existing))
+	for _, group := range existing {
+		known[group.ID] = group
+	}
+	result := make([]policy.RuleGroup, len(incoming))
+	for index, group := range incoming {
+		group.ID = strings.TrimSpace(group.ID)
+		group.Name = strings.TrimSpace(group.Name)
+		if group.ID == "" || group.Name == "" {
+			return nil, fmt.Errorf("group %d requires id and name", index)
+		}
+		stored, exists := known[group.ID]
+		if len(group.Domains) == 0 && !exists {
+			return nil, fmt.Errorf("group %q requires at least one domain", group.Name)
+		}
+		if exists {
+			group.DomainSource = stored.DomainSource
+			group.DefaultDomains = append([]string(nil), stored.DefaultDomains...)
+			if !group.Customized && len(group.DefaultDomains) > 0 {
+				group.Domains = append([]string(nil), group.DefaultDomains...)
+			}
+		} else {
+			group.DomainSource = ""
+			group.DefaultDomains = nil
+			group.Customized = true
+		}
+		result[index] = group
+	}
+	return result, nil
+}
+
 func (s *Server) authorize(next http.HandlerFunc) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		provided := strings.TrimPrefix(request.Header.Get("Authorization"), "Bearer ")
-		if len(provided) != len(s.token) || subtle.ConstantTimeCompare([]byte(provided), []byte(s.token)) != 1 {
+		if len(provided) == len(s.token) && subtle.ConstantTimeCompare([]byte(provided), []byte(s.token)) == 1 {
+			next(writer, request.WithContext(context.WithValue(request.Context(), accessContextKey{}, accessScope{operator: true})))
+			return
+		}
+		providedHash := tokenHash(provided)
+		s.mu.RLock()
+		var houseID string
+		for _, house := range s.config.Houses {
+			if constantTimeEqual(house.AdminTokenHash, providedHash) {
+				houseID = house.ID
+			}
+		}
+		s.mu.RUnlock()
+		if houseID == "" {
 			writeError(writer, http.StatusUnauthorized, errors.New("invalid admin token"))
 			return
 		}
-		next(writer, request)
+		next(writer, request.WithContext(context.WithValue(request.Context(), accessContextKey{}, accessScope{houseID: houseID})))
+	}
+}
+
+func requestScope(request *http.Request) accessScope {
+	scope, _ := request.Context().Value(accessContextKey{}).(accessScope)
+	return scope
+}
+
+func scopeAllows(scope accessScope, profile policy.Profile) bool {
+	return scope.operator || (scope.houseID != "" && profile.HouseID == scope.houseID)
+}
+
+func filterProfiles(profiles []policy.Profile, scope accessScope) []policy.Profile {
+	result := make([]policy.Profile, 0, len(profiles))
+	for _, profile := range profiles {
+		if scopeAllows(scope, profile) {
+			result = append(result, profile)
+		}
+	}
+	return result
+}
+
+func splitInvitationKeys(value string) []string {
+	keys := []string{}
+	for _, code := range strings.Split(value, ",") {
+		if code = strings.TrimSpace(code); code != "" {
+			keys = append(keys, tokenHash(code))
+		}
+	}
+	return keys
+}
+
+func containsConstantTime(values []string, wanted string) bool {
+	found := 0
+	for _, value := range values {
+		found |= subtle.ConstantTimeCompare([]byte(value), []byte(wanted))
+	}
+	return found == 1
+}
+
+func constantTimeEqual(left, right string) bool {
+	return len(left) == len(right) && subtle.ConstantTimeCompare([]byte(left), []byte(right)) == 1
+}
+
+func tokenHash(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])
+}
+
+func environmentOrDefault(name, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+		return value
+	}
+	return fallback
+}
+
+type presetCatalog struct {
+	Presets []presetDefinition `json:"presets"`
+}
+
+type presetDefinition struct {
+	ID               string                   `json:"id"`
+	Themes           map[string]policy.Action `json:"themes"`
+	ServiceOverrides map[string]policy.Action `json:"service_overrides"`
+}
+
+type serviceCatalog struct {
+	Services map[string]serviceDefinition `json:"services"`
+}
+
+type serviceDefinition struct {
+	Label        string `json:"label"`
+	Theme        string `json:"theme"`
+	DomainSource string `json:"domain_source"`
+}
+
+func presetGroups(id, catalogDir string) ([]policy.RuleGroup, error) {
+	if id == "" {
+		id = "explorando"
+	}
+	var catalog presetCatalog
+	if err := readCatalogJSON(filepath.Join(catalogDir, "presets.json"), &catalog); err != nil {
+		return nil, err
+	}
+	var preset *presetDefinition
+	for index := range catalog.Presets {
+		if catalog.Presets[index].ID == id {
+			preset = &catalog.Presets[index]
+			break
+		}
+	}
+	if preset == nil {
+		return nil, errors.New("preset desconhecido")
+	}
+	groups, err := availablePackageGroups(catalogDir)
+	if err != nil {
+		return nil, err
+	}
+	for index := range groups {
+		action, exists := preset.ServiceOverrides[strings.TrimPrefix(groups[index].ID, "service-")]
+		if !exists {
+			action, err = presetAction(preset.Themes, groups[index].Category)
+			if err != nil {
+				return nil, err
+			}
+		}
+		groups[index].Action = action
+	}
+	return groups, nil
+}
+
+func availablePackageGroups(catalogDir string) ([]policy.RuleGroup, error) {
+	type groupSeed struct {
+		id, name, category, reason, file string
+		action                           policy.Action
+	}
+	seeds := []groupSeed{
+		{id: "gambling-br", name: "Apostas", category: "gambling", reason: "Apostas usam dinheiro real e podem criar hábitos difíceis de controlar", file: "gambling-br-authorized.txt", action: policy.ActionBlock},
+		{id: "adult", name: "Conteúdo adulto", category: "adult_content", reason: "Conteúdo sexual explícito pede contexto, conversa e um acordo adequado para esta fase", file: "adult-content-regulators.txt", action: policy.ActionBlock},
+	}
+	groups := make([]policy.RuleGroup, 0, len(seeds)+16)
+	for _, seed := range seeds {
+		path := filepath.Join(catalogDir, seed.file)
+		domains, err := config.LoadDomains(path)
+		if err != nil {
+			return nil, fmt.Errorf("carregar pacote %q: %w", seed.id, err)
+		}
+		groups = append(groups, policy.RuleGroup{
+			ID: seed.id, Name: seed.name, Action: seed.action, Category: seed.category,
+			Reason: seed.reason, Domains: append([]string{}, domains...),
+			DefaultDomains: append([]string{}, domains...), DomainSource: path,
+		})
+	}
+	var services serviceCatalog
+	if err := readCatalogJSON(filepath.Join(catalogDir, "service-pools.json"), &services); err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(services.Services))
+	for serviceID := range services.Services {
+		ids = append(ids, serviceID)
+	}
+	sort.Strings(ids)
+	for _, serviceID := range ids {
+		service := services.Services[serviceID]
+		path := filepath.Join(catalogDir, service.DomainSource)
+		domains, err := config.LoadDomains(path)
+		if err != nil {
+			return nil, fmt.Errorf("carregar serviço %q: %w", serviceID, err)
+		}
+		groups = append(groups, policy.RuleGroup{
+			ID: "service-" + serviceID, Name: service.Label, Action: policy.ActionObserve, Category: service.Theme,
+			Reason: serviceReason(service.Theme), Domains: append([]string{}, domains...),
+			DefaultDomains: append([]string{}, domains...), DomainSource: path,
+		})
+	}
+	return groups, nil
+}
+
+func validPackageAction(action policy.Action) bool {
+	return action == policy.ActionAllow || action == policy.ActionBlock || action == policy.ActionObserve
+}
+
+func readCatalogJSON(path string, target any) error {
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("ler catálogo %s: %w", path, err)
+	}
+	if err := json.Unmarshal(contents, target); err != nil {
+		return fmt.Errorf("decodificar catálogo %s: %w", path, err)
+	}
+	return nil
+}
+
+func presetAction(themes map[string]policy.Action, theme string) (policy.Action, error) {
+	action := themes[theme]
+	switch action {
+	case policy.ActionAllow, policy.ActionBlock, policy.ActionObserve:
+		return action, nil
+	default:
+		return "", fmt.Errorf("ação ausente ou inválida para tema %q", theme)
+	}
+}
+
+func serviceReason(theme string) string {
+	switch theme {
+	case "messaging_and_communities":
+		return "Comunidades e mensagens também são espaços de amizade; o combinado deve preservar contato e segurança"
+	case "games_and_social_play":
+		return "Jogos online misturam brincadeira, criação, compras e contato com outras pessoas"
+	case "social_video":
+		return "Vídeo social mistura criação, aprendizado, publicidade e disputa por atenção"
+	default:
+		return "Redes sociais misturam convivência, entretenimento, publicidade e pressão por atenção"
 	}
 }
 
@@ -308,10 +823,19 @@ func randomToken() (string, error) {
 
 func cloneConfig(cfg config.Config) config.Config {
 	result := cfg
+	result.Houses = append([]config.House{}, cfg.Houses...)
+	result.UsedInvitationKeys = append([]string{}, cfg.UsedInvitationKeys...)
 	result.Profiles = make([]policy.Profile, len(cfg.Profiles))
 	for index, profile := range cfg.Profiles {
 		result.Profiles[index] = profile
-		result.Profiles[index].Rules = append([]policy.Rule(nil), profile.Rules...)
+		result.Profiles[index].Rules = make([]policy.Rule, len(profile.Rules))
+		copy(result.Profiles[index].Rules, profile.Rules)
+		result.Profiles[index].Groups = make([]policy.RuleGroup, len(profile.Groups))
+		for groupIndex, group := range profile.Groups {
+			result.Profiles[index].Groups[groupIndex] = group
+			result.Profiles[index].Groups[groupIndex].Domains = append([]string{}, group.Domains...)
+			result.Profiles[index].Groups[groupIndex].DefaultDomains = append([]string{}, group.DefaultDomains...)
+		}
 	}
 	return result
 }

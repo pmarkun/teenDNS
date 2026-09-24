@@ -24,6 +24,28 @@ func TestDecideUsesMostSpecificRule(t *testing.T) {
 	}
 }
 
+func TestDecideMatchesDomainInsideRuleGroup(t *testing.T) {
+	profile := Profile{
+		DefaultAction: ActionAllow,
+		Version:       3,
+		Groups: []RuleGroup{{
+			ID:       "gambling",
+			Name:     "Apostas",
+			Action:   ActionBlock,
+			Category: "gambling",
+			Domains:  []string{"example.bet.br"},
+		}},
+	}
+	store, err := NewStore([]Profile{{ID: "home", Hostname: "home.test", DefaultAction: ActionAllow, Groups: profile.Groups}})
+	if err != nil || store == nil {
+		t.Fatalf("group validation failed: %v", err)
+	}
+	decision, err := Decide(profile, "promo.example.bet.br")
+	if err != nil || decision.Action != ActionBlock || decision.Category != "gambling" {
+		t.Fatalf("unexpected decision: %+v, %v", decision, err)
+	}
+}
+
 func TestDecideDoesNotMatchDeceptiveSuffix(t *testing.T) {
 	profile := Profile{
 		DefaultAction: ActionAllow,

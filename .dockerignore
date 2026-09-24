@@ -1,4 +1,9 @@
 .git
 .direnv
 .local
+secrets
+tmp
 result
+web/node_modules
+web/dist
+web/*.tsbuildinfo

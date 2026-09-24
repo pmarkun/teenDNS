@@ -39,6 +39,18 @@ services:
       lab:
         ipv4_address: 10.77.53.30
 
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    depends_on:
+      - gateway
+    ports:
+      - "127.0.0.1:18082:8080"
+    networks:
+      lab:
+        ipv4_address: 10.77.53.40
+
 networks:
   lab:
     ipam:

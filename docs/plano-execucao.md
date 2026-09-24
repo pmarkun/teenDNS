@@ -1,8 +1,14 @@
 # Plano de execução — MVP teenDNS
 
+> Documento histórico de arquitetura e fases. Para o que está implementado e
+> validado hoje, consulte [status.md](status.md); para começar, use o
+> [README do projeto](../README.md).
+
 Versão inicial: 23 de setembro de 2026.
 
-Estado atual: M1, M2 e M3 concluídos no laboratório local. Resultados e lacunas estão registrados em [status.md](status.md). O próximo marco é M4 — autoprovisionamento.
+Estado atual: M1 a M4 concluídos no laboratório local. A página explicativa da
+M5 também está implementada; pedido e contestação continuam pendentes.
+Resultados e lacunas estão registrados em [status.md](status.md).
 
 ## 1. Objetivo da validação
 
@@ -205,6 +211,9 @@ Critério de aceite: uma resposta pública pode ser reaproveitada sem transporta
 
 Entregas:
 
+- cadastrar uma casa por convite de uso único;
+- emitir uma chave administrativa exclusiva da casa;
+- isolar perfis e alterações entre casas;
 - criar e desativar perfil;
 - gerar, revogar e regenerar hostname;
 - cadastrar regra por domínio ou categoria;
@@ -212,7 +221,9 @@ Entregas:
 - listar eventos agregados e bloqueios recentes;
 - apagar dados do perfil.
 
-Critério de aceite: um perfil completo é provisionado pela interface sem editar arquivos do servidor.
+Critério de aceite: uma casa e seu primeiro perfil são provisionados pela
+interface sem editar arquivos do servidor, e sua chave não acessa perfis de
+outra casa.
 
 ### Fase 5 — Pedido e contestação
 

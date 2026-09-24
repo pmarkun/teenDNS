@@ -8,7 +8,8 @@ O laboratório comprova o uso de vários perfis DNS-over-TLS no mesmo endereço.
 - Docker Engine;
 - Docker Compose v2.
 
-O ambiente Nix fornece Go e as ferramentas de desenvolvimento. Os containers não publicam nenhum serviço além do gateway DoT em `127.0.0.1:8853`.
+O ambiente Nix fornece Go, Node.js e as ferramentas de desenvolvimento. Todos
+os serviços são publicados apenas na interface local.
 
 ## Executar
 
@@ -40,6 +41,12 @@ Os dois endpoints chegam a `127.0.0.1:8853`. O cliente envia o endpoint como SNI
 - `fixture`: DNS UDP determinístico em `10.77.53.10:5353`;
 - `unbound`: resolvedor e cache em `10.77.53.20:5353`;
 - `gateway`: DNS-over-TLS em `10.77.53.30:853`, publicado localmente como `127.0.0.1:8853`.
+- `gateway` API: HTTP em `127.0.0.1:18081`;
+- `web`: página pública, painel e visão do adolescente em `http://127.0.0.1:18082`.
+
+O painel usa a chave `teendns-lab`, que existe somente para o laboratório. A API
+aceita `Authorization: Bearer teendns-lab`. Não reutilize essa chave fora do
+ambiente local.
 
 A faixa `10.77.53.0/24` foi escolhida porque as faixas Docker `172.17.0.0/16` a `172.31.0.0/16` já estavam ocupadas nesta máquina.
 
@@ -74,8 +81,37 @@ docker compose logs gateway
 
 Cada evento contém perfil, domínio, tipo de consulta, ação e versão da política. Não contém URL, caminho, título ou conteúdo.
 
-## Recarga de políticas
+## Alteração de políticas
+
+O caminho normal é o painel. A API valida a configuração completa, grava uma
+nova versão do arquivo por troca atômica e publica o novo snapshot em memória.
+Consultas novas já usam a regra sem reiniciar o gateway.
+
+As regras visíveis no painel são grupos de domínios. Clique no nome de uma
+regra para ver e editar a lista completa. `Apostas` parte dos 185 domínios em
+`catalog/v1/gambling-br-authorized.txt`; o botão **Restaurar padrão** recupera
+essa versão mesmo depois de uma edição. Ao criar uma regra, um único domínio
+também é usado como nome. A partir do segundo domínio, o painel exige um nome
+para o grupo.
+
+O sinal `SIGHUP` continua disponível para testes e operação manual.
 
 O gateway mantém um snapshot imutável das políticas em memória. Ao receber `SIGHUP`, valida a configuração completa e troca o snapshot de forma atômica. Se a nova configuração for inválida, mantém a última versão válida.
 
 No laboratório, `lab-up.sh` copia a configuração base para `.local/gateway.json`. Os testes alteram somente essa cópia ignorada pelo Git.
+
+## Pareamento pelo DNS
+
+A rota `http://127.0.0.1:18082/meu-dns` cria um desafio aleatório e tenta
+resolver um nome único sob `pair.teendns.test`. Quando essa consulta chega pelo
+endpoint DNS de um perfil, o gateway confirma o pareamento e entrega àquela aba
+uma sessão de leitura válida por uma hora.
+
+A resposta para o adolescente contém somente o nome do perfil e os nomes e
+motivos dos grupos em modo **Proteger**. Ela não contém hostnames de endpoint,
+domínios das regras, contagens ou histórico. O identificador consultado no DNS
+é diferente do identificador usado para acompanhar o desafio pela API.
+
+O navegador pode ignorar o DNS do sistema por causa de DoH próprio, VPN ou
+configuração incorreta. Nesses casos, a tela não autentica silenciosamente: o
+pareamento expira e orienta a conferir a configuração.

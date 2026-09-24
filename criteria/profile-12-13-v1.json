@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0.0",
+  "profile_id": "br-12-13-v1",
+  "taxonomy": "age-rating-v1.json",
+  "target_ages": [12, 13],
+  "maximum_compatible_rating": 12,
+  "decision_bands": [
+    {
+      "ratings": ["L", "6", "10", "12"],
+      "default_action": "allow",
+      "explanation": "Compatível em princípio com 12-13 anos; outros riscos técnicos ou acordos familiares ainda podem gerar observação."
+    },
+    {
+      "ratings": ["14"],
+      "default_action": "mediate",
+      "explanation": "Primeiro limiar incompatível; conversar, oferecer contexto ou pedir revisão antes de bloquear quando não houver risco imediato."
+    },
+    {
+      "ratings": ["16", "18"],
+      "default_action": "protect",
+      "explanation": "Intervenção forte por padrão, com exceção explícita, temporária e explicada quando apropriado."
+    },
+    {
+      "ratings": ["unknown"],
+      "default_action": "observe",
+      "explanation": "Ausência de evidência não significa classificação livre."
+    }
+  ],
+  "mandatory_overrides": [
+    {
+      "when": "illegal_or_immediate_safety_risk",
+      "action": "protect",
+      "examples": ["exploração sexual infantil", "instrução concreta de automutilação", "aliciamento", "ameaça imediata"]
+    },
+    {
+      "when": "mixed_content_platform_without_page_evidence",
+      "action": "observe",
+      "examples": ["rede social", "buscador", "plataforma de vídeo", "fórum", "IA generativa"]
+    }
+  ],
+  "context_rules": [
+    {
+      "contexts": ["educational", "journalistic", "scientific", "health", "prevention"],
+      "effect": "human_review",
+      "note": "O contexto pode atenuar uma decisão, mas não apaga evidências gráficas, instruções perigosas ou funcionalidades de risco."
+    },
+    {
+      "contexts": ["promotion", "glamorization", "instruction", "commercial_exploitation"],
+      "effect": "increase_priority",
+      "note": "Promoção, incentivo ou exploração comercial elevam a urgência da intervenção."
+    }
+  ],
+  "scope_rules": {
+    "domain": "Usar somente quando a finalidade dominante do serviço sustentar a classificação.",
+    "site": "Usar quando a classificação for consistente em seções relevantes do serviço.",
+    "page": "Escopo preferido para conteúdo editorial ou gerado por usuários.",
+    "feature": "Escopo preferido para chat, compras, localização, recomendação, IA e outras funcionalidades."
+  }
+}

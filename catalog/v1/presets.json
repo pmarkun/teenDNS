@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "principles": [
+    "A escolha e do domicilio; o preset e apenas um ponto de partida.",
+    "Nenhum preset exige ou armazena data de nascimento.",
+    "Bloquear um servico nao equivale a julgar quem o utiliza.",
+    "Mensageria, estudo, criacao, comunidade e jogo podem coexistir no mesmo servico."
+  ],
+  "presets": [
+    {
+      "id": "acompanhado",
+      "label": "Acompanhado",
+      "description": "Mais escolhas combinadas antes de liberar servicos mistos.",
+      "themes": {
+        "adult_content": "block",
+        "gambling": "block",
+        "social_platforms": "block",
+        "social_video": "block",
+        "messaging_and_communities": "observe",
+        "games_and_social_play": "observe"
+      },
+      "service_overrides": {}
+    },
+    {
+      "id": "explorando",
+      "label": "Explorando",
+      "description": "Acesso amplo com visibilidade e acordos por servico.",
+      "themes": {
+        "adult_content": "block",
+        "gambling": "block",
+        "social_platforms": "observe",
+        "social_video": "observe",
+        "messaging_and_communities": "observe",
+        "games_and_social_play": "observe"
+      },
+      "service_overrides": {}
+    },
+    {
+      "id": "autonomia-guiada",
+      "label": "Autonomia guiada",
+      "description": "Protecoes essenciais e conversa a partir do uso observado.",
+      "themes": {
+        "adult_content": "block",
+        "gambling": "block",
+        "social_platforms": "allow",
+        "social_video": "allow",
+        "messaging_and_communities": "allow",
+        "games_and_social_play": "allow"
+      },
+      "service_overrides": {}
+    }
+  ]
+}
