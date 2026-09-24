@@ -1,6 +1,6 @@
 # Estado da execução
 
-Atualizado em 23 de setembro de 2026. Branch: `feat/dot-lab`.
+Atualizado em 23 de setembro de 2026. Branch: `codex/admin-web`.
 
 ## Marcos
 
@@ -47,6 +47,8 @@ Casos confirmados:
 - TTL máximo de 300 segundos e bloqueio negativo de 30 segundos;
 - recarga por `SIGHUP` preservando a versão anterior em caso de erro.
 - alteração pelo painel aplicada ao DNS sem reiniciar o gateway;
+- grupos de regras aplicados pelo resolvedor, incluindo subdomínios;
+- restauração dos domínios padrão preservada pelo servidor;
 - página pública e painel servidos pelo mesmo laboratório.
 
 ### Interface
@@ -56,6 +58,10 @@ Validação no navegador conectado:
 - página pública em `1440 × 1000` e `390 × 844`;
 - painel em `1440 × 900` e `390 × 844`;
 - login local, troca de perfil, lista de regras e estados responsivos;
+- edição de `Apostas` com os 185 domínios do catálogo visíveis e restauração da
+  lista padrão;
+- criação com um domínio usando o próprio domínio como nome e criação com dois
+  domínios exigindo um nome para o grupo;
 - mudança de `blocked.test` de `Proteger` para `Permitir` produziu resposta
   `NOERROR`; a restauração para `Proteger` voltou a produzir `NXDOMAIN`.
 
@@ -100,6 +106,8 @@ Esses números descrevem apenas esta máquina e o upstream local em cache. Não 
 - Regenerar a CA sem recriar o gateway deixava cliente e servidor com certificados diferentes; `lab-up.sh` agora força a recriação dos containers.
 - A troca atômica do arquivo de configuração criava modo `0600`; o helper agora publica a cópia de laboratório como `0644` para o container sem privilégios.
 - Um CNAME poderia apontar para domínio bloqueado depois de uma consulta inicialmente permitida; o gateway agora reavalia os destinos CNAME.
+- O catálogo entrava na imagem com permissão exclusiva do arquivo de origem; a
+  imagem agora publica os catálogos como leitura para o processo sem privilégios.
 
 ## Limites ainda não validados
 

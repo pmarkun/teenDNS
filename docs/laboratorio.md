@@ -87,6 +87,13 @@ O caminho normal é o painel. A API valida a configuração completa, grava uma
 nova versão do arquivo por troca atômica e publica o novo snapshot em memória.
 Consultas novas já usam a regra sem reiniciar o gateway.
 
+As regras visíveis no painel são grupos de domínios. Clique no nome de uma
+regra para ver e editar a lista completa. `Apostas` parte dos 185 domínios em
+`catalog/v1/gambling-br-authorized.txt`; o botão **Restaurar padrão** recupera
+essa versão mesmo depois de uma edição. Ao criar uma regra, um único domínio
+também é usado como nome. A partir do segundo domínio, o painel exige um nome
+para o grupo.
+
 O sinal `SIGHUP` continua disponível para testes e operação manual.
 
 O gateway mantém um snapshot imutável das políticas em memória. Ao receber `SIGHUP`, valida a configuração completa e troca o snapshot de forma atômica. Se a nova configuração for inválida, mantém a última versão válida.
