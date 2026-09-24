@@ -5,6 +5,8 @@ perfis independentes, escolhe pacotes de proteção e pode explicar os acordos
 para crianças e adolescentes em uma página pareada.
 
 O MVP está ativo em <https://teendns.lab.markun.com.br>.
+O código elegível para publicação fica na branch protegida `production`;
+`main` continua sendo a branch de integração.
 
 ## Usar o staging
 
