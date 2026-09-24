@@ -8,6 +8,18 @@ export type Rule = {
   reason?: string
 }
 
+export type RuleGroup = {
+  id: string
+  name: string
+  action: Action
+  category?: string
+  reason?: string
+  domains: string[]
+  default_domains?: string[]
+  domain_source?: string
+  customized?: boolean
+}
+
 export type Profile = {
   id: string
   label?: string
@@ -16,6 +28,7 @@ export type Profile = {
   default_action: Action
   version: number
   rules: Rule[]
+  groups?: RuleGroup[]
 }
 
 export type EventSummary = {
@@ -71,6 +84,7 @@ export const api = {
         label: profile.label || profile.id,
         default_action: profile.default_action,
         rules: profile.rules,
+        groups: profile.groups || [],
       }),
     })
   },

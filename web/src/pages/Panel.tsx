@@ -1,22 +1,13 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
-import { Action, api, EventSummary, getToken, Profile, Rule, setToken } from '../api'
+import { Action, api, EventSummary, getToken, Profile, RuleGroup, setToken } from '../api'
 import { Drawer, Logo } from '../components'
-
-const ruleLabel: Record<string, string> = {
-  gambling: 'Apostas',
-  adult: 'Conteúdo adulto',
-  tracking: 'Rastreamento',
-}
-
-function displayRule(rule: Rule) {
-  return ruleLabel[rule.category || ''] || rule.domain
-}
 
 export function Panel() {
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [selectedID, setSelectedID] = useState('')
   const [summary, setSummary] = useState<EventSummary | null>(null)
-  const [drawer, setDrawer] = useState<'rule' | 'details' | 'advanced' | 'profile' | null>(null)
+  const [drawer, setDrawer] = useState<'group' | 'details' | 'advanced' | 'profile' | null>(null)
+  const [editingGroup, setEditingGroup] = useState<RuleGroup | null>(null)
   const [status, setStatus] = useState('carregando')
   const [error, setError] = useState('')
   const [authNeeded, setAuthNeeded] = useState(!getToken())
@@ -25,10 +16,7 @@ export function Panel() {
     () => profiles.find((profile) => profile.id === selectedID) || profiles.find((profile) => !profile.disabled),
     [profiles, selectedID],
   )
-  const visibleRules = useMemo(
-    () => (selected?.rules || []).map((rule, index) => ({ rule, index })).filter(({ rule }) => rule.category !== 'education'),
-    [selected],
-  )
+  const groups = selected?.groups || []
 
   const load = useCallback(async () => {
     try {
@@ -53,9 +41,9 @@ export function Panel() {
     void api.summary(selected.id).then(setSummary).catch(() => setSummary(null))
   }, [selected])
 
-  async function updateRule(index: number, action: Action) {
+  async function updateGroup(index: number, action: Action) {
     if (!selected) return
-    const optimistic = { ...selected, rules: (selected.rules || []).map((rule, position) => position === index ? { ...rule, action } : rule) }
+    const optimistic = { ...selected, groups: groups.map((group, position) => position === index ? { ...group, action } : group) }
     setProfiles((current) => current.map((profile) => profile.id === selected.id ? optimistic : profile))
     setStatus('salvando')
     try {
@@ -104,12 +92,15 @@ export function Panel() {
             <button onClick={() => void navigator.clipboard.writeText(selected.hostname)}>COPIAR</button>
           </div>
 
-          <div className="rules-heading"><h2>REGRAS, POR ENQUANTO</h2><span>{visibleRules.length}</span></div>
+          <div className="rules-heading"><h2>REGRAS, POR ENQUANTO</h2><span>{groups.length}</span></div>
           <div className="rule-list">
-            {visibleRules.map(({ rule, index }) => (
-              <div className="rule-row" key={`${rule.domain}-${index}`}>
-                <strong>{displayRule(rule)}</strong>
-                <select className={`action action--${rule.action}`} value={rule.action} onChange={(event) => void updateRule(index, event.target.value as Action)} aria-label={`Ação para ${displayRule(rule)}`}>
+            {groups.map((group, index) => (
+              <div className="rule-row" key={group.id}>
+                <button className="group-title" onClick={() => { setEditingGroup(group); setDrawer('group') }}>
+                  <strong>{group.name}</strong>
+                  <small>{group.domains.length} {group.domains.length === 1 ? 'domínio' : 'domínios'}</small>
+                </button>
+                <select className={`action action--${group.action}`} value={group.action} onChange={(event) => void updateGroup(index, event.target.value as Action)} aria-label={`Ação para ${group.name}`}>
                   <option value="block">Proteger</option>
                   <option value="observe">Observar</option>
                   <option value="allow">Permitir</option>
@@ -118,7 +109,7 @@ export function Panel() {
             ))}
           </div>
           <div className="rule-actions">
-            <button onClick={() => setDrawer('rule')}>+ botar outra regra</button>
+            <button onClick={() => { setEditingGroup(null); setDrawer('group') }}>+ botar outra regra</button>
             <button onClick={() => setDrawer('advanced')}>mexer nas partes nerds →</button>
           </div>
         </section>
@@ -132,7 +123,7 @@ export function Panel() {
         <blockquote>regra boa é regra que dá pra conversar.</blockquote>
       </aside>
 
-      {drawer === 'rule' && selected && <RuleDrawer profile={selected} onClose={() => setDrawer(null)} onSaved={(saved) => { setProfiles((all) => all.map((item) => item.id === saved.id ? saved : item)); setDrawer(null) }} />}
+      {drawer === 'group' && selected && <GroupDrawer profile={selected} group={editingGroup} onClose={() => setDrawer(null)} onSaved={(saved) => { setProfiles((all) => all.map((item) => item.id === saved.id ? saved : item)); setDrawer(null) }} />}
       {drawer === 'profile' && <ProfileDrawer onClose={() => setDrawer(null)} onCreated={(profile) => { setProfiles((all) => [...all, profile]); setSelectedID(profile.id); setDrawer(null) }} />}
       {drawer === 'details' && <DetailsDrawer summary={summary} onClose={() => setDrawer(null)} />}
       {drawer === 'advanced' && selected && <AdvancedDrawer profile={selected} onClose={() => setDrawer(null)} onRotated={(profile) => setProfiles((all) => all.map((item) => item.id === profile.id ? profile : item))} />}
@@ -162,22 +153,63 @@ function Login({ error, onSuccess }: { error: string; onSuccess: () => Promise<v
   )
 }
 
-function RuleDrawer({ profile, onClose, onSaved }: { profile: Profile; onClose: () => void; onSaved: (profile: Profile) => void }) {
-  const [domain, setDomain] = useState('')
-  const [action, setAction] = useState<Action>('block')
-  const [reason, setReason] = useState('')
+function parseDomains(value: string) {
+  return [...new Set(value.split(/[\n,]/).map((domain) => domain.trim().toLowerCase()).filter(Boolean))]
+}
+
+function GroupDrawer({ profile, group, onClose, onSaved }: { profile: Profile; group: RuleGroup | null; onClose: () => void; onSaved: (profile: Profile) => void }) {
+  const [domainsText, setDomainsText] = useState((group?.domains || []).join('\n'))
+  const [name, setName] = useState(group?.name || '')
+  const [action, setAction] = useState<Action>(group?.action || 'block')
+  const [reason, setReason] = useState(group?.reason || '')
+  const [customized, setCustomized] = useState(group?.customized || false)
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const domains = parseDomains(domainsText)
+  const needsName = Boolean(group) || domains.length > 1
+  const defaults = group?.default_domains || []
+
   async function submit(event: FormEvent) {
     event.preventDefault()
     setSaving(true)
-    const saved = await api.updateProfile({ ...profile, rules: [...(profile.rules || []), { domain, include_subdomains: true, action, reason }] })
-    onSaved(saved)
+    setSaveError('')
+    try {
+      const nextGroup: RuleGroup = {
+        id: group?.id || `custom-${crypto.randomUUID()}`,
+        name: needsName ? name.trim() : domains[0],
+        action,
+        reason,
+        category: group?.category,
+        domains,
+        default_domains: defaults,
+        domain_source: group?.domain_source,
+        customized: group ? customized : true,
+      }
+      const nextGroups = group
+        ? (profile.groups || []).map((item) => item.id === group.id ? nextGroup : item)
+        : [...(profile.groups || []), nextGroup]
+      const saved = await api.updateProfile({ ...profile, groups: nextGroups })
+      onSaved(saved)
+    } catch (cause) {
+      setSaveError(cause instanceof Error ? cause.message : 'Não foi possível salvar a regra')
+      setSaving(false)
+    }
   }
-  return <Drawer title="BOTAR OUTRA REGRA" onClose={onClose}><form className="drawer-form" onSubmit={(event) => void submit(event)}>
-    <label>domínio<input required placeholder="exemplo.com" value={domain} onChange={(event) => setDomain(event.target.value)} /></label>
+  function restoreDefaults() {
+    setDomainsText(defaults.join('\n'))
+    setCustomized(false)
+  }
+
+  return <Drawer title={group ? `EDITAR ${group.name.toUpperCase()}` : 'BOTAR OUTRA REGRA'} onClose={onClose}><form className="drawer-form" onSubmit={(event) => void submit(event)}>
+    <label>domínios <small>{domains.length} {domains.length === 1 ? 'domínio' : 'domínios'}</small><textarea className="domain-list" required placeholder={'exemplo.com\noutro-exemplo.com'} value={domainsText} onChange={(event) => { setDomainsText(event.target.value); setCustomized(true) }} /><small>um por linha — você também pode colar uma lista</small></label>
+    {needsName && <label>nome da regra<input required placeholder="ex.: Jogos e apostas" value={name} onChange={(event) => setName(event.target.value)} /></label>}
     <label>o que fazer<select value={action} onChange={(event) => setAction(event.target.value as Action)}><option value="block">Proteger</option><option value="observe">Observar</option><option value="allow">Permitir</option></select></label>
     <label>por quê?<textarea required placeholder="Um motivo que faça sentido para a família." value={reason} onChange={(event) => setReason(event.target.value)} /></label>
-    <button className="button button--ink" disabled={saving}>{saving ? 'SALVANDO…' : 'SALVAR REGRA'}</button>
+    <div className="drawer-actions">
+      <button className="button button--ink" disabled={saving || domains.length === 0 || (needsName && !name.trim())}>{saving ? 'SALVANDO…' : 'SALVAR REGRA'}</button>
+      {defaults.length > 0 && <button type="button" className="restore-button" onClick={restoreDefaults}>RESTAURAR PADRÃO <small>{defaults.length} domínios</small></button>}
+    </div>
+    {saveError && <p className="form-error" role="alert">{saveError}</p>}
   </form></Drawer>
 }
 
