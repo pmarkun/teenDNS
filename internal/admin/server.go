@@ -25,10 +25,18 @@ import (
 
 	"github.com/pmarkun/teendns/internal/config"
 	"github.com/pmarkun/teendns/internal/gateway"
+	"github.com/pmarkun/teendns/internal/magiclink"
 	"github.com/pmarkun/teendns/internal/mail"
 	"github.com/pmarkun/teendns/internal/pairing"
 	"github.com/pmarkun/teendns/internal/policy"
 )
+
+// DigestPurger removes a deleted house's accumulated digest data. Satisfied
+// by *digest.Store; kept as a narrow interface so admin does not need to
+// import the digest package for anything else.
+type DigestPurger interface {
+	Forget(houseID string, profileIDs []string) error
+}
 
 type Server struct {
 	mu             sync.RWMutex
@@ -37,6 +45,8 @@ type Server struct {
 	profiles       *policy.Manager
 	events         *gateway.EventBuffer
 	pairings       *pairing.Manager
+	magicLinks     *magiclink.Manager
+	digest         DigestPurger
 	hostnameSuffix string
 	token          string
 	catalogDir     string
@@ -89,6 +99,34 @@ type invitationResponse struct {
 
 const invitationValidity = 7 * 24 * time.Hour
 
+type magicLinkRequest struct {
+	Email string `json:"email"`
+}
+
+type magicLinkResponse struct {
+	Status string `json:"status"`
+}
+
+type sessionRequest struct {
+	Token string `json:"token"`
+}
+
+type sessionResponse struct {
+	SessionToken string `json:"session_token"`
+}
+
+type houseSummaryResponse struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Email        string `json:"email,omitempty"`
+	ProfileCount int    `json:"profile_count"`
+}
+
+type waitlistEntryResponse struct {
+	Email     string    `json:"email"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type catalogPackageResponse struct {
 	ID              string        `json:"id"`
 	Name            string        `json:"name"`
@@ -113,12 +151,18 @@ type youthProfile struct {
 	Rules []youthRule `json:"rules"`
 }
 
-func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, events *gateway.EventBuffer, pairings *pairing.Manager, hostnameSuffix, token string, mailer mail.Sender) (*Server, error) {
+func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, events *gateway.EventBuffer, pairings *pairing.Manager, magicLinks *magiclink.Manager, digest DigestPurger, hostnameSuffix, token string, mailer mail.Sender) (*Server, error) {
 	if strings.TrimSpace(token) == "" {
 		return nil, errors.New("admin token is required")
 	}
 	if pairings == nil {
 		return nil, errors.New("pairing manager is required")
+	}
+	if magicLinks == nil {
+		return nil, errors.New("magic link manager is required")
+	}
+	if digest == nil {
+		return nil, errors.New("digest purger is required")
 	}
 	if mailer == nil {
 		return nil, errors.New("mailer is required")
@@ -132,6 +176,8 @@ func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, e
 		profiles:       profiles,
 		events:         events,
 		pairings:       pairings,
+		magicLinks:     magicLinks,
+		digest:         digest,
 		hostnameSuffix: strings.TrimSuffix(strings.ToLower(hostnameSuffix), "."),
 		token:          token,
 		catalogDir:     environmentOrDefault("TEENDNS_CATALOG_DIR", "catalog/v1"),
@@ -164,7 +210,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/pairing/challenges/{id}", s.pairingChallengeStatus)
 	mux.HandleFunc("GET /api/v1/youth/profile", s.youthProfile)
 	mux.HandleFunc("POST /api/v1/houses", s.registerHouse)
+	mux.HandleFunc("GET /api/v1/houses", s.authorize(s.listHouses))
+	mux.HandleFunc("DELETE /api/v1/houses/{id}", s.authorize(s.deleteHouse))
 	mux.HandleFunc("POST /api/v1/invitations", s.authorize(s.createInvitation))
+	mux.HandleFunc("GET /api/v1/waitlist", s.authorize(s.listWaitlist))
+	mux.HandleFunc("POST /api/v1/auth/magic-links", s.requestMagicLink)
+	mux.HandleFunc("POST /api/v1/auth/sessions", s.createSession)
 	mux.HandleFunc("GET /api/v1/catalog/packages", s.authorize(s.catalogPackages))
 	mux.HandleFunc("/api/v1/profiles", s.authorize(s.profilesCollection))
 	mux.HandleFunc("/api/v1/profiles/", s.authorize(s.profileResource))
@@ -303,7 +354,7 @@ func (s *Server) createInvitation(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 
-	link := s.invitationLink(request, code)
+	link := s.publicLink(request, "/comecar", "convite", code)
 	sendErr := s.mailer.Send(input.Email, "Convite para o teenDNS", invitationEmailBody(link))
 	if sendErr != nil {
 		log.Printf("invitation: failed to email %s: %v", input.Email, sendErr)
@@ -319,12 +370,16 @@ func (s *Server) createInvitation(writer http.ResponseWriter, request *http.Requ
 	})
 }
 
-func (s *Server) invitationLink(request *http.Request, code string) string {
+// publicLink builds an absolute link to a page of the public web app, e.g.
+// /comecar?convite=<code> or /entrar?token=<token>. TEENDNS_PUBLIC_URL
+// overrides the default of deriving the origin from the request's Host
+// header (which nginx forwards unchanged from the original client request).
+func (s *Server) publicLink(request *http.Request, path, param, value string) string {
 	base := strings.TrimSuffix(environmentOrDefault("TEENDNS_PUBLIC_URL", ""), "/")
 	if base == "" {
 		base = "https://" + request.Host
 	}
-	return base + "/comecar?convite=" + url.QueryEscape(code)
+	return base + path + "?" + param + "=" + url.QueryEscape(value)
 }
 
 func invitationEmailBody(link string) string {
@@ -334,6 +389,17 @@ func invitationEmailBody(link string) string {
 	)
 }
 
+func magicLinkEmailBody(link string) string {
+	return fmt.Sprintf(
+		"<p>Use o link abaixo para entrar no painel do teenDNS.</p><p><a href=\"%[1]s\">%[1]s</a></p><p>Este link é de uso único e expira em 15 minutos.</p>",
+		html.EscapeString(link),
+	)
+}
+
+func waitlistEmailBody() string {
+	return "<p>Recebemos seu pedido de acesso ao teenDNS. Ainda não encontramos uma casa com este e-mail, então você entrou na nossa lista de espera — avisamos assim que houver um convite disponível.</p>"
+}
+
 func looksLikeEmail(value string) bool {
 	at := strings.IndexByte(value, '@')
 	if at <= 0 || at == len(value)-1 {
@@ -341,6 +407,153 @@ func looksLikeEmail(value string) bool {
 	}
 	domain := value[at+1:]
 	return strings.Contains(domain, ".") && !strings.ContainsAny(value, " \t\n")
+}
+
+// requestMagicLink is the public entry point of the email-first login flow:
+// a house with this email gets a one-time login link; anyone else gets
+// added to the waitlist for an operator to invite later.
+func (s *Server) requestMagicLink(writer http.ResponseWriter, request *http.Request) {
+	var input magicLinkRequest
+	if err := decodeJSON(request, &input); err != nil {
+		writeError(writer, http.StatusBadRequest, err)
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(input.Email))
+	if !looksLikeEmail(email) {
+		writeError(writer, http.StatusBadRequest, errors.New("e-mail inválido"))
+		return
+	}
+
+	s.mu.RLock()
+	var houseID string
+	for _, house := range s.config.Houses {
+		if strings.EqualFold(house.Email, email) {
+			houseID = house.ID
+			break
+		}
+	}
+	s.mu.RUnlock()
+
+	writer.Header().Set("Cache-Control", "no-store")
+	if houseID == "" {
+		if err := s.update(func(cfg *config.Config) error {
+			for _, entry := range cfg.Waitlist {
+				if strings.EqualFold(entry.Email, email) {
+					return nil
+				}
+			}
+			cfg.Waitlist = append(cfg.Waitlist, config.WaitlistEntry{Email: email, CreatedAt: time.Now()})
+			return nil
+		}); err != nil {
+			writeError(writer, http.StatusInternalServerError, err)
+			return
+		}
+		if err := s.mailer.Send(email, "Lista de espera do teenDNS", waitlistEmailBody()); err != nil {
+			log.Printf("waitlist: failed to email %s: %v", email, err)
+		}
+		writeJSON(writer, http.StatusOK, magicLinkResponse{Status: "waitlisted"})
+		return
+	}
+
+	token, err := s.magicLinks.IssueLink(houseID)
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, err)
+		return
+	}
+	link := s.publicLink(request, "/entrar", "token", token)
+	if err := s.mailer.Send(email, "Seu link de acesso ao teenDNS", magicLinkEmailBody(link)); err != nil {
+		log.Printf("magic link: failed to email %s: %v", email, err)
+	}
+	writeJSON(writer, http.StatusOK, magicLinkResponse{Status: "magic_link_sent"})
+}
+
+// createSession exchanges a one-time magic link token for a session token
+// that authorize() accepts exactly like a house's permanent admin token,
+// without ever touching that permanent token.
+func (s *Server) createSession(writer http.ResponseWriter, request *http.Request) {
+	var input sessionRequest
+	if err := decodeJSON(request, &input); err != nil {
+		writeError(writer, http.StatusBadRequest, err)
+		return
+	}
+	_, sessionToken, ok := s.magicLinks.Redeem(strings.TrimSpace(input.Token))
+	if !ok {
+		writeError(writer, http.StatusForbidden, errors.New("link inválido ou expirado"))
+		return
+	}
+	writer.Header().Set("Cache-Control", "no-store")
+	writeJSON(writer, http.StatusCreated, sessionResponse{SessionToken: sessionToken})
+}
+
+func (s *Server) listHouses(writer http.ResponseWriter, request *http.Request) {
+	if !requestScope(request).operator {
+		writeError(writer, http.StatusForbidden, errors.New("somente o operador pode listar casas"))
+		return
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	houses := make([]houseSummaryResponse, 0, len(s.config.Houses))
+	for _, house := range s.config.Houses {
+		count := 0
+		for _, profile := range s.config.Profiles {
+			if profile.HouseID == house.ID {
+				count++
+			}
+		}
+		houses = append(houses, houseSummaryResponse{ID: house.ID, Name: house.Name, Email: house.Email, ProfileCount: count})
+	}
+	writeJSON(writer, http.StatusOK, map[string]any{"houses": houses})
+}
+
+// deleteHouse removes a house and every one of its profiles, then purges
+// any digest data accumulated for those profiles. It is irreversible: the
+// family's DNS profiles stop resolving immediately.
+func (s *Server) deleteHouse(writer http.ResponseWriter, request *http.Request) {
+	if !requestScope(request).operator {
+		writeError(writer, http.StatusForbidden, errors.New("somente o operador pode apagar casas"))
+		return
+	}
+	houseID := request.PathValue("id")
+	var removedProfileIDs []string
+	err := s.update(func(cfg *config.Config) error {
+		index := slices.IndexFunc(cfg.Houses, func(house config.House) bool { return house.ID == houseID })
+		if index < 0 {
+			return errors.New("casa não encontrada")
+		}
+		cfg.Houses = slices.Delete(cfg.Houses, index, index+1)
+		remaining := make([]policy.Profile, 0, len(cfg.Profiles))
+		for _, profile := range cfg.Profiles {
+			if profile.HouseID == houseID {
+				removedProfileIDs = append(removedProfileIDs, profile.ID)
+				continue
+			}
+			remaining = append(remaining, profile)
+		}
+		cfg.Profiles = remaining
+		return nil
+	})
+	if err != nil {
+		writeError(writer, http.StatusNotFound, err)
+		return
+	}
+	if err := s.digest.Forget(houseID, removedProfileIDs); err != nil {
+		log.Printf("delete house %s: failed to purge digest data: %v", houseID, err)
+	}
+	writeJSON(writer, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+func (s *Server) listWaitlist(writer http.ResponseWriter, request *http.Request) {
+	if !requestScope(request).operator {
+		writeError(writer, http.StatusForbidden, errors.New("somente o operador pode ver a lista de espera"))
+		return
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	entries := make([]waitlistEntryResponse, 0, len(s.config.Waitlist))
+	for _, entry := range s.config.Waitlist {
+		entries = append(entries, waitlistEntryResponse{Email: entry.Email, CreatedAt: entry.CreatedAt})
+	}
+	writeJSON(writer, http.StatusOK, map[string]any{"waitlist": entries})
 }
 
 func (s *Server) createPairingChallenge(writer http.ResponseWriter, _ *http.Request) {
@@ -701,6 +914,10 @@ func (s *Server) authorize(next http.HandlerFunc) http.HandlerFunc {
 			next(writer, request.WithContext(context.WithValue(request.Context(), accessContextKey{}, accessScope{operator: true})))
 			return
 		}
+		if houseID, ok := s.magicLinks.HouseID(provided); ok {
+			next(writer, request.WithContext(context.WithValue(request.Context(), accessContextKey{}, accessScope{houseID: houseID})))
+			return
+		}
 		providedHash := tokenHash(provided)
 		s.mu.RLock()
 		var houseID string
@@ -945,6 +1162,7 @@ func cloneConfig(cfg config.Config) config.Config {
 	result := cfg
 	result.Houses = append([]config.House{}, cfg.Houses...)
 	result.Invitations = append([]config.Invitation{}, cfg.Invitations...)
+	result.Waitlist = append([]config.WaitlistEntry{}, cfg.Waitlist...)
 	result.Profiles = make([]policy.Profile, len(cfg.Profiles))
 	for index, profile := range cfg.Profiles {
 		result.Profiles[index] = profile
