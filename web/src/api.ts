@@ -55,6 +55,26 @@ export type Invitation = {
   email_sent: boolean
 }
 
+export type MagicLinkStatus = {
+  status: 'magic_link_sent' | 'waitlisted'
+}
+
+export type Session = {
+  session_token: string
+}
+
+export type HouseSummary = {
+  id: string
+  name: string
+  email?: string
+  profile_count: number
+}
+
+export type WaitlistEntry = {
+  email: string
+  created_at: string
+}
+
 export type EventSummary = {
   profile_id: string
   total: number
@@ -127,6 +147,29 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ email }),
     })
+  },
+  requestMagicLink(email: string) {
+    return request<MagicLinkStatus>('/api/v1/auth/magic-links', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    })
+  },
+  exchangeMagicLink(token: string) {
+    return request<Session>('/api/v1/auth/sessions', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    })
+  },
+  async listHouses() {
+    const result = await request<{ houses: HouseSummary[] }>('/api/v1/houses')
+    return result.houses
+  },
+  deleteHouse(id: string) {
+    return request<void>(`/api/v1/houses/${id}`, { method: 'DELETE' })
+  },
+  async listWaitlist() {
+    const result = await request<{ waitlist: WaitlistEntry[] }>('/api/v1/waitlist')
+    return result.waitlist
   },
   registerHouse(invitationCode: string, houseName: string, profileName: string, preset: string) {
     return request<HouseRegistration>('/api/v1/houses', {
