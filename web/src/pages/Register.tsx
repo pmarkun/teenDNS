@@ -2,10 +2,17 @@ import { type FormEvent, useState } from 'react'
 import { api, type HouseRegistration, setToken } from '../api'
 import { Logo } from '../components'
 
+const presets = [
+  { id: 'accompanied', name: 'Acompanhado', phase: 'por volta de 6–9', description: 'Protege apostas, conteúdo adulto e redes sociais.' },
+  { id: 'exploring', name: 'Explorando', phase: 'por volta de 10–13', description: 'Protege apostas e conteúdo adulto; observa redes sociais.' },
+  { id: 'guided', name: 'Autonomia guiada', phase: 'por volta de 14–17', description: 'Protege apostas; observa conteúdo adulto e redes sociais.' },
+]
+
 export function Register() {
   const [invitationCode, setInvitationCode] = useState('')
   const [houseName, setHouseName] = useState('')
   const [profileName, setProfileName] = useState('')
+  const [preset, setPreset] = useState('exploring')
   const [created, setCreated] = useState<HouseRegistration | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -15,7 +22,7 @@ export function Register() {
     setBusy(true)
     setError('')
     try {
-      const registration = await api.registerHouse(invitationCode, houseName, profileName)
+      const registration = await api.registerHouse(invitationCode, houseName, profileName, preset)
       setToken(registration.admin_token)
       setCreated(registration)
     } catch (cause) {
@@ -58,6 +65,16 @@ export function Register() {
         <label htmlFor="invitation-code">código do convite<input id="invitation-code" required autoComplete="one-time-code" value={invitationCode} onChange={(event) => setInvitationCode(event.target.value)} /></label>
         <label htmlFor="house-name">nome da casa<input id="house-name" required autoComplete="organization" placeholder="ex.: Casa Silva" value={houseName} onChange={(event) => setHouseName(event.target.value)} /></label>
         <label htmlFor="profile-name">quem vai usar primeiro?<input id="profile-name" required autoComplete="off" placeholder="ex.: Lia" value={profileName} onChange={(event) => setProfileName(event.target.value)} /></label>
+        <fieldset className="preset-picker">
+          <legend>um ponto de partida</legend>
+          <p>Escolha pela fase, não pela data de nascimento. Tudo pode ser mudado depois.</p>
+          {presets.map((option) => (
+            <label key={option.id} className={preset === option.id ? 'is-selected' : ''}>
+              <input type="radio" name="preset" value={option.id} checked={preset === option.id} onChange={(event) => setPreset(event.target.value)} />
+              <span><strong>{option.name}</strong><small>{option.phase}</small>{option.description}</span>
+            </label>
+          ))}
+        </fieldset>
         <button className="button button--ink" disabled={busy}>{busy ? 'CRIANDO…' : 'CRIAR CASA'}</button>
         {error && <p className="form-error" role="alert">{error}</p>}
         <a className="login-invite" href="/painel">já tenho uma casa →</a>

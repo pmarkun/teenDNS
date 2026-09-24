@@ -283,6 +283,16 @@ h1, h2, h3, .button, .logo { font-family: 'Barlow Condensed', Impact, 'Arial Nar
 .register-card label { display: block; margin: 22px 0; font-weight: 850; }
 .register-card input { width: 100%; min-height: 52px; margin-top: 8px; padding: 12px; border: 2px solid var(--ink); border-radius: 0; background: white; }
 .register-card > .button { width: 100%; }
+.preset-picker { margin: 28px 0; padding: 0; border: 0; }
+.preset-picker legend { font-family: 'Barlow Condensed'; font-size: 27px; font-weight: 900; }
+.preset-picker > p { margin: 3px 0 13px; color: var(--muted); font-size: 13px; line-height: 1.4; }
+.preset-picker label { position: relative; margin: 0; padding: 13px 14px 13px 45px; border: 2px solid var(--ink); display: block; cursor: pointer; }
+.preset-picker label + label { border-top: 0; }
+.preset-picker label.is-selected { background: var(--acid); }
+.preset-picker input { position: absolute; left: 14px; top: 15px; width: 18px; min-height: 18px; margin: 0; accent-color: var(--ink); }
+.preset-picker span { display: block; font-size: 13px; line-height: 1.35; }
+.preset-picker strong { display: inline-block; margin-right: 9px; font-family: 'Barlow Condensed'; font-size: 22px; line-height: 1; }
+.preset-picker small { color: var(--muted); font-size: 11px; font-weight: 750; }
 .secret-card { margin: 28px 0; border: 4px solid var(--ink); background: var(--acid); transform: rotate(-.4deg); }
 .secret-card code { display: block; padding: 18px; overflow-wrap: anywhere; font-size: 16px; font-weight: 800; }
 .secret-card button { width: 100%; padding: 12px; border: 0; border-top: 3px solid var(--ink); background: var(--ink); color: white; font-family: 'Barlow Condensed'; font-size: 22px; font-weight: 900; cursor: pointer; }

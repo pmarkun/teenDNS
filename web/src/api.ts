@@ -101,13 +101,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  registerHouse(invitationCode: string, houseName: string, profileName: string) {
+  registerHouse(invitationCode: string, houseName: string, profileName: string, preset: string) {
     return request<HouseRegistration>('/api/v1/houses', {
       method: 'POST',
       body: JSON.stringify({
         invitation_code: invitationCode,
         house_name: houseName,
         profile_name: profileName,
+        preset,
       }),
     })
   },
