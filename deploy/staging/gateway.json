@@ -1,0 +1,36 @@
+{
+  "listen": ":853",
+  "upstream": "unbound:5353",
+  "certificate": "/runtime/certs/fullchain.pem",
+  "private_key": "/runtime/certs/privkey.pem",
+  "max_ttl": 300,
+  "profiles": [
+    {
+      "id": "piloto",
+      "label": "Piloto",
+      "hostname": "p-piloto.dns.lab.markun.com.br",
+      "default_action": "allow",
+      "version": 1,
+      "rules": [],
+      "groups": [
+        {
+          "id": "gambling-br",
+          "name": "Apostas",
+          "action": "block",
+          "category": "gambling",
+          "reason": "Apostas usam dinheiro real e podem criar hábitos difíceis de controlar",
+          "domains": [],
+          "domain_source": "/catalog/v1/gambling-br-authorized.txt"
+        },
+        {
+          "id": "adult",
+          "name": "Conteúdo adulto",
+          "action": "block",
+          "category": "adult",
+          "reason": "Conteúdo sexual explícito está fora do combinado deste perfil",
+          "domains": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+services:
+  unbound:
+    build:
+      context: ../..
+      dockerfile: docker/unbound.staging.Dockerfile
+    restart: unless-stopped
+    mem_limit: 192m
+    cpus: 0.50
+    networks:
+      teendns:
+        ipv4_address: 10.78.53.20
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+
+  gateway:
+    build:
+      context: ../..
+      dockerfile: docker/gateway.Dockerfile
+    command:
+      - gateway
+      - -config
+      - /runtime/gateway.json
+      - -hostname-suffix
+      - dns.lab.markun.com.br
+      - -pairing-suffix
+      - pair.dns.lab.markun.com.br
+    depends_on:
+      - unbound
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.50
+    ports:
+      - "853:853"
+    environment:
+      TEENDNS_ADMIN_TOKEN: ${TEENDNS_ADMIN_TOKEN:?set TEENDNS_ADMIN_TOKEN in .env}
+    user: "1000:1000"
+    volumes:
+      - ${TEENDNS_RUNTIME_DIR:-./runtime}:/runtime
+    networks:
+      teendns:
+        ipv4_address: 10.78.53.30
+    logging: *logging
+    security_opt:
+      - no-new-privileges:true
+
+  web:
+    build:
+      context: ../..
+      dockerfile: docker/web.Dockerfile
+    depends_on:
+      - gateway
+    restart: unless-stopped
+    mem_limit: 64m
+    cpus: 0.25
+    ports:
+      - "127.0.0.1:18182:8080"
+    networks:
+      teendns:
+        ipv4_address: 10.78.53.40
+    logging: *logging
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  teendns:
+    ipam:
+      config:
+        - subnet: 10.78.53.0/24
