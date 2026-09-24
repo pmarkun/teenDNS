@@ -207,6 +207,9 @@ Critério de aceite: uma resposta pública pode ser reaproveitada sem transporta
 
 Entregas:
 
+- cadastrar uma casa por convite de uso único;
+- emitir uma chave administrativa exclusiva da casa;
+- isolar perfis e alterações entre casas;
 - criar e desativar perfil;
 - gerar, revogar e regenerar hostname;
 - cadastrar regra por domínio ou categoria;
@@ -214,7 +217,9 @@ Entregas:
 - listar eventos agregados e bloqueios recentes;
 - apagar dados do perfil.
 
-Critério de aceite: um perfil completo é provisionado pela interface sem editar arquivos do servidor.
+Critério de aceite: uma casa e seu primeiro perfil são provisionados pela
+interface sem editar arquivos do servidor, e sua chave não acessa perfis de
+outra casa.
 
 ### Fase 5 — Pedido e contestação
 

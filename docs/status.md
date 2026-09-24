@@ -9,7 +9,7 @@ Atualizado em 23 de setembro de 2026. Branch: `codex/admin-web`.
 | M1 — DNS no laboratório | Concluído | Consulta DNS-over-TLS atravessa gateway e Unbound e recebe resposta determinística da fixture |
 | M2 — Mini-DNS por perfil | Concluído | Ana bloqueia `blocked.test`; Bia resolve o mesmo domínio pelo mesmo IP e porta |
 | M3 — Cache seguro | Concluído | Dois perfis usam uma consulta upstream; TTL é limitado; política recarrega atomicamente; CNAME não contorna bloqueio |
-| M4 — Autoprovisionamento | Concluído no laboratório | Painel cria perfis, edita regras, gira endpoints e ativa mudanças sem reiniciar o DNS; visão jovem pareia pelo DNS |
+| M4 — Autoprovisionamento | Concluído no laboratório | Convite cria casa isolada e primeiro perfil; painel edita regras, gira endpoints e ativa mudanças sem reiniciar o DNS; visão jovem pareia pelo DNS |
 | M5 — Camada educativa | Em andamento | Página pública e linguagem visual concluídas; pedido e contestação ainda pendentes |
 | M6 — Aparelho real | Staging pronto | Domínio público, wildcard TLS e gateway na porta 853 validados fora da rede local; aparelho Android real ainda pendente |
 | M7 — Piloto controlado | Pendente | Requer revisão de privacidade, autenticação e operação |
@@ -52,6 +52,8 @@ Casos confirmados:
 - desafio DNS de uso único convertido em sessão de leitura do perfil;
 - resposta jovem limitada a nomes e motivos dos grupos protegidos;
 - página pública e painel servidos pelo mesmo laboratório.
+- convite de uso único cria casa, chave administrativa e primeiro perfil;
+- chave de uma casa lista apenas seus perfis e recebe `404` para perfil alheio.
 
 ### Interface
 
@@ -59,6 +61,8 @@ Validação no navegador conectado:
 
 - página pública em `1440 × 1000` e `390 × 844`;
 - painel em `1440 × 900` e `390 × 844`;
+- cadastro de casa em `1440 × 900` e `390 × 844`, sem rolagem horizontal;
+- formulário de convite inválido exibindo erro legível sem perder os campos;
 - login local, troca de perfil, lista de regras e estados responsivos;
 - edição de `Apostas` com os 185 domínios do catálogo visíveis e restauração da
   lista padrão;

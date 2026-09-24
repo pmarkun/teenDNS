@@ -9,6 +9,7 @@ containers, rede ou volumes com o Farol Lab/Ralph.
 - DNS-over-TLS do perfil inicial: `p-piloto.dns.lab.markun.com.br`;
 - porta DoT: `853/TCP`;
 - visão pareada: <https://teendns.lab.markun.com.br/meu-dns>.
+- cadastro de casa por convite: <https://teendns.lab.markun.com.br/comecar>.
 
 O registro `*.dns.lab.markun.com.br` aponta para a VPS. Cada perfil criado no
 painel recebe um hostname próprio sob esse wildcard, mas todos chegam ao mesmo
@@ -21,6 +22,7 @@ gateway. O SNI da conexão TLS seleciona a política correta.
 | Código implantado | `/opt/teendns/app` |
 | Estado gravável | `/opt/teendns/runtime` |
 | Segredo administrativo | `/opt/teendns/.env` (`0600`) |
+| Convites disponíveis | `TEENDNS_INVITATION_CODES` em `/opt/teendns/.env` |
 | Projeto Compose | `teendns` |
 | Rede Docker | `10.78.53.0/24` |
 | Web local para o Caddy | `127.0.0.1:18182` |
@@ -67,6 +69,17 @@ O arquivo `/opt/teendns/runtime/gateway.json` é estado do staging. Não deve se
 substituído durante atualizações, pois contém os perfis e regras editados em
 tempo real pelo painel.
 
+## Convites e casas
+
+Os códigos são aleatórios, ficam apenas no `.env` e são separados por vírgula.
+Quando um código é usado, somente seu hash é gravado no estado do gateway; por
+isso ele não pode cadastrar uma segunda casa. O cadastro mostra a chave da casa
+uma única vez. O servidor guarda apenas o hash dessa chave e limita com ela
+todas as leituras e alterações aos perfis da casa correspondente.
+
+O `TEENDNS_ADMIN_TOKEN` continua sendo uma credencial operacional global do
+staging. Ele não deve ser entregue a famílias.
+
 ## Verificações do primeiro deploy
 
 - HTTPS público retornou `200` com certificado válido;
@@ -74,5 +87,7 @@ tempo real pelo painel.
 - `1pra1.bet.br` retornou `NXDOMAIN` no perfil piloto;
 - o desafio criado na visão jovem foi observado pelo mesmo perfil e virou uma
   sessão pareada;
+- a rota `/comecar` respondeu `200` e rejeitou um convite inválido sem consumir
+  o convite piloto ativo;
 - os três containers `teendns-unbound-1`, `teendns-gateway-1` e
   `teendns-web-1` permaneceram isolados dos containers do Farol Lab.
