@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -173,6 +174,87 @@ func TestPresetGroupsChooseActionsWithoutStoringAge(t *testing.T) {
 	}
 	if _, err := presetGroups("inventado", catalogDir); err == nil {
 		t.Fatal("expected unknown preset error")
+	}
+}
+
+func TestCatalogPackagesListsReadyMadeGroups(t *testing.T) {
+	t.Setenv("TEENDNS_CATALOG_DIR", filepath.Join("..", "..", "catalog", "v1"))
+	cfg := testConfig()
+	path := filepath.Join(t.TempDir(), "gateway.json")
+	if err := config.WriteAtomic(path, cfg, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager, _ := policy.NewManager(cfg.Profiles)
+	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), "dns.teendns.test", "secret")
+
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/catalog/packages", nil)
+	request.Header.Set("Authorization", "Bearer secret")
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", response.Code, response.Body.String())
+	}
+	var result struct {
+		Packages []catalogPackageResponse `json:"packages"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Packages) != 15 {
+		t.Fatalf("expected 15 packages, got %d", len(result.Packages))
+	}
+	instagram := slices.IndexFunc(result.Packages, func(item catalogPackageResponse) bool { return item.ID == "service-instagram" })
+	if instagram < 0 || result.Packages[instagram].DomainCount != 3 || result.Packages[instagram].SuggestedAction != policy.ActionObserve {
+		t.Fatalf("unexpected Instagram package: %+v", result.Packages)
+	}
+}
+
+func TestProfilePackageCanBeEnabledAndDisabledImmediately(t *testing.T) {
+	t.Setenv("TEENDNS_CATALOG_DIR", filepath.Join("..", "..", "catalog", "v1"))
+	cfg := testConfig()
+	path := filepath.Join(t.TempDir(), "gateway.json")
+	if err := config.WriteAtomic(path, cfg, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager, _ := policy.NewManager(cfg.Profiles)
+	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), "dns.teendns.test", "secret")
+
+	put := func(body string) policy.Profile {
+		request := httptest.NewRequest(http.MethodPut, "/api/v1/profiles/home/packages/service-instagram", bytes.NewBufferString(body))
+		request.Header.Set("Authorization", "Bearer secret")
+		response := httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, request)
+		if response.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", response.Code, response.Body.String())
+		}
+		var updated policy.Profile
+		if err := json.NewDecoder(response.Body).Decode(&updated); err != nil {
+			t.Fatal(err)
+		}
+		return updated
+	}
+
+	enabled := put(`{"enabled":true,"action":"block"}`)
+	if groupAction(enabled.Groups, "service-instagram") != policy.ActionBlock {
+		t.Fatalf("Instagram package was not enabled: %+v", enabled.Groups)
+	}
+	active, ok := manager.Profile("p-home.dns.teendns.test")
+	if !ok {
+		t.Fatal("updated profile is not active")
+	}
+	decision, err := policy.Decide(active, "cdninstagram.com")
+	if err != nil || decision.Action != policy.ActionBlock {
+		t.Fatalf("package was not activated immediately: %+v, %v", decision, err)
+	}
+
+	disabled := put(`{"enabled":false,"action":"block"}`)
+	if groupAction(disabled.Groups, "service-instagram") != "" {
+		t.Fatalf("Instagram package was not removed: %+v", disabled.Groups)
+	}
+	active, _ = manager.Profile("p-home.dns.teendns.test")
+	decision, err = policy.Decide(active, "cdninstagram.com")
+	if err != nil || decision.Action != policy.ActionAllow {
+		t.Fatalf("disabled package kept affecting decisions: %+v, %v", decision, err)
 	}
 }
 

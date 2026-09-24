@@ -71,6 +71,20 @@ type houseResponse struct {
 	Name string `json:"name"`
 }
 
+type catalogPackageResponse struct {
+	ID              string        `json:"id"`
+	Name            string        `json:"name"`
+	Category        string        `json:"category"`
+	Reason          string        `json:"reason"`
+	DomainCount     int           `json:"domain_count"`
+	SuggestedAction policy.Action `json:"suggested_action"`
+}
+
+type packageRequest struct {
+	Enabled bool          `json:"enabled"`
+	Action  policy.Action `json:"action"`
+}
+
 type youthRule struct {
 	Name   string `json:"name"`
 	Reason string `json:"reason"`
@@ -121,9 +135,26 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/pairing/challenges/{id}", s.pairingChallengeStatus)
 	mux.HandleFunc("GET /api/v1/youth/profile", s.youthProfile)
 	mux.HandleFunc("POST /api/v1/houses", s.registerHouse)
+	mux.HandleFunc("GET /api/v1/catalog/packages", s.authorize(s.catalogPackages))
 	mux.HandleFunc("/api/v1/profiles", s.authorize(s.profilesCollection))
 	mux.HandleFunc("/api/v1/profiles/", s.authorize(s.profileResource))
 	return withCORS(mux)
+}
+
+func (s *Server) catalogPackages(writer http.ResponseWriter, _ *http.Request) {
+	groups, err := availablePackageGroups(s.catalogDir)
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, err)
+		return
+	}
+	packages := make([]catalogPackageResponse, 0, len(groups))
+	for _, group := range groups {
+		packages = append(packages, catalogPackageResponse{
+			ID: group.ID, Name: group.Name, Category: group.Category, Reason: group.Reason,
+			DomainCount: len(group.Domains), SuggestedAction: group.Action,
+		})
+	}
+	writeJSON(writer, http.StatusOK, map[string]any{"packages": packages})
 }
 
 func (s *Server) registerHouse(writer http.ResponseWriter, request *http.Request) {
@@ -308,6 +339,10 @@ func (s *Server) profileResource(writer http.ResponseWriter, request *http.Reque
 		writeJSON(writer, http.StatusOK, s.events.Summary(id))
 		return
 	}
+	if len(parts) == 3 && parts[1] == "packages" && request.Method == http.MethodPut {
+		s.updateProfilePackage(writer, request, id, parts[2])
+		return
+	}
 	if len(parts) != 1 {
 		writeError(writer, http.StatusNotFound, errors.New("resource not found"))
 		return
@@ -382,6 +417,62 @@ func (s *Server) profileResource(writer http.ResponseWriter, request *http.Reque
 		writer.Header().Set("Allow", "GET, PUT, DELETE")
 		writeError(writer, http.StatusMethodNotAllowed, errors.New("method not allowed"))
 	}
+}
+
+func (s *Server) updateProfilePackage(writer http.ResponseWriter, request *http.Request, profileID, packageID string) {
+	var input packageRequest
+	if err := decodeJSON(request, &input); err != nil {
+		writeError(writer, http.StatusBadRequest, err)
+		return
+	}
+	packages, err := availablePackageGroups(s.catalogDir)
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, err)
+		return
+	}
+	packageIndex := slices.IndexFunc(packages, func(group policy.RuleGroup) bool { return group.ID == packageID })
+	if packageIndex < 0 {
+		writeError(writer, http.StatusNotFound, errors.New("pacote não encontrado"))
+		return
+	}
+	if input.Action == "" {
+		input.Action = packages[packageIndex].Action
+	}
+	if !validPackageAction(input.Action) {
+		writeError(writer, http.StatusBadRequest, errors.New("ação inválida"))
+		return
+	}
+	var updated policy.Profile
+	err = s.update(func(cfg *config.Config) error {
+		profile, ok := profileByID(cfg.Profiles, profileID)
+		if !ok {
+			return os.ErrNotExist
+		}
+		index := slices.IndexFunc(profile.Groups, func(group policy.RuleGroup) bool { return group.ID == packageID })
+		if !input.Enabled {
+			if index >= 0 {
+				profile.Groups = append(profile.Groups[:index], profile.Groups[index+1:]...)
+			}
+		} else if index >= 0 && len(profile.Groups[index].Domains) > 0 {
+			profile.Groups[index].Action = input.Action
+		} else {
+			group := packages[packageIndex]
+			group.Action = input.Action
+			if index >= 0 {
+				profile.Groups[index] = group
+			} else {
+				profile.Groups = append(profile.Groups, group)
+			}
+		}
+		profile.Version++
+		updated = *profile
+		return nil
+	})
+	if err != nil {
+		writeError(writer, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(writer, http.StatusOK, updated)
 }
 
 func (s *Server) rotateEndpoint(writer http.ResponseWriter, id string) {
@@ -603,27 +694,41 @@ func presetGroups(id, catalogDir string) ([]policy.RuleGroup, error) {
 	if preset == nil {
 		return nil, errors.New("preset desconhecido")
 	}
+	groups, err := availablePackageGroups(catalogDir)
+	if err != nil {
+		return nil, err
+	}
+	for index := range groups {
+		action, exists := preset.ServiceOverrides[strings.TrimPrefix(groups[index].ID, "service-")]
+		if !exists {
+			action, err = presetAction(preset.Themes, groups[index].Category)
+			if err != nil {
+				return nil, err
+			}
+		}
+		groups[index].Action = action
+	}
+	return groups, nil
+}
+
+func availablePackageGroups(catalogDir string) ([]policy.RuleGroup, error) {
 	type groupSeed struct {
 		id, name, category, reason, file string
-		theme                            string
+		action                           policy.Action
 	}
 	seeds := []groupSeed{
-		{id: "gambling-br", name: "Apostas", category: "gambling", reason: "Apostas usam dinheiro real e podem criar hábitos difíceis de controlar", file: "gambling-br-authorized.txt", theme: "gambling"},
-		{id: "adult", name: "Conteúdo adulto", category: "adult_content", reason: "Conteúdo sexual explícito pede contexto, conversa e um acordo adequado para esta fase", file: "adult-content-regulators.txt", theme: "adult_content"},
+		{id: "gambling-br", name: "Apostas", category: "gambling", reason: "Apostas usam dinheiro real e podem criar hábitos difíceis de controlar", file: "gambling-br-authorized.txt", action: policy.ActionBlock},
+		{id: "adult", name: "Conteúdo adulto", category: "adult_content", reason: "Conteúdo sexual explícito pede contexto, conversa e um acordo adequado para esta fase", file: "adult-content-regulators.txt", action: policy.ActionBlock},
 	}
 	groups := make([]policy.RuleGroup, 0, len(seeds)+16)
 	for _, seed := range seeds {
-		action, err := presetAction(preset.Themes, seed.theme)
-		if err != nil {
-			return nil, err
-		}
 		path := filepath.Join(catalogDir, seed.file)
 		domains, err := config.LoadDomains(path)
 		if err != nil {
-			return nil, fmt.Errorf("carregar preset %q: %w", preset.ID, err)
+			return nil, fmt.Errorf("carregar pacote %q: %w", seed.id, err)
 		}
 		groups = append(groups, policy.RuleGroup{
-			ID: seed.id, Name: seed.name, Action: action, Category: seed.category,
+			ID: seed.id, Name: seed.name, Action: seed.action, Category: seed.category,
 			Reason: seed.reason, Domains: append([]string{}, domains...),
 			DefaultDomains: append([]string{}, domains...), DomainSource: path,
 		})
@@ -639,26 +744,22 @@ func presetGroups(id, catalogDir string) ([]policy.RuleGroup, error) {
 	sort.Strings(ids)
 	for _, serviceID := range ids {
 		service := services.Services[serviceID]
-		action, exists := preset.ServiceOverrides[serviceID]
-		if !exists {
-			var err error
-			action, err = presetAction(preset.Themes, service.Theme)
-			if err != nil {
-				return nil, err
-			}
-		}
 		path := filepath.Join(catalogDir, service.DomainSource)
 		domains, err := config.LoadDomains(path)
 		if err != nil {
 			return nil, fmt.Errorf("carregar serviço %q: %w", serviceID, err)
 		}
 		groups = append(groups, policy.RuleGroup{
-			ID: "service-" + serviceID, Name: service.Label, Action: action, Category: service.Theme,
+			ID: "service-" + serviceID, Name: service.Label, Action: policy.ActionObserve, Category: service.Theme,
 			Reason: serviceReason(service.Theme), Domains: append([]string{}, domains...),
 			DefaultDomains: append([]string{}, domains...), DomainSource: path,
 		})
 	}
 	return groups, nil
+}
+
+func validPackageAction(action policy.Action) bool {
+	return action == policy.ActionAllow || action == policy.ActionBlock || action == policy.ActionObserve
 }
 
 func readCatalogJSON(path string, target any) error {
