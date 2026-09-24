@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -563,49 +564,134 @@ func environmentOrDefault(name, fallback string) string {
 	return fallback
 }
 
+type presetCatalog struct {
+	Presets []presetDefinition `json:"presets"`
+}
+
 type presetDefinition struct {
-	id             string
-	socialAction   policy.Action
-	adultAction    policy.Action
-	gamblingAction policy.Action
+	ID               string                   `json:"id"`
+	Themes           map[string]policy.Action `json:"themes"`
+	ServiceOverrides map[string]policy.Action `json:"service_overrides"`
+}
+
+type serviceCatalog struct {
+	Services map[string]serviceDefinition `json:"services"`
+}
+
+type serviceDefinition struct {
+	Label        string `json:"label"`
+	Theme        string `json:"theme"`
+	DomainSource string `json:"domain_source"`
 }
 
 func presetGroups(id, catalogDir string) ([]policy.RuleGroup, error) {
 	if id == "" {
-		id = "exploring"
+		id = "explorando"
 	}
-	presets := map[string]presetDefinition{
-		"accompanied": {id: "accompanied", socialAction: policy.ActionBlock, adultAction: policy.ActionBlock, gamblingAction: policy.ActionBlock},
-		"exploring":   {id: "exploring", socialAction: policy.ActionObserve, adultAction: policy.ActionBlock, gamblingAction: policy.ActionBlock},
-		"guided":      {id: "guided", socialAction: policy.ActionObserve, adultAction: policy.ActionObserve, gamblingAction: policy.ActionBlock},
+	var catalog presetCatalog
+	if err := readCatalogJSON(filepath.Join(catalogDir, "presets.json"), &catalog); err != nil {
+		return nil, err
 	}
-	preset, ok := presets[id]
-	if !ok {
+	var preset *presetDefinition
+	for index := range catalog.Presets {
+		if catalog.Presets[index].ID == id {
+			preset = &catalog.Presets[index]
+			break
+		}
+	}
+	if preset == nil {
 		return nil, errors.New("preset desconhecido")
 	}
 	type groupSeed struct {
 		id, name, category, reason, file string
-		action                           policy.Action
+		theme                            string
 	}
 	seeds := []groupSeed{
-		{id: "gambling-br", name: "Apostas", category: "gambling", reason: "Apostas usam dinheiro real e podem criar hábitos difíceis de controlar", file: "gambling-br-authorized.txt", action: preset.gamblingAction},
-		{id: "adult", name: "Conteúdo adulto", category: "adult", reason: "Conteúdo sexual explícito pede contexto, conversa e um acordo adequado para esta fase", file: "adult-content-regulators.txt", action: preset.adultAction},
-		{id: "social", name: "Redes sociais", category: "social", reason: "Redes sociais misturam convivência, entretenimento, publicidade e pressão por atenção", file: "social-platforms.txt", action: preset.socialAction},
+		{id: "gambling-br", name: "Apostas", category: "gambling", reason: "Apostas usam dinheiro real e podem criar hábitos difíceis de controlar", file: "gambling-br-authorized.txt", theme: "gambling"},
+		{id: "adult", name: "Conteúdo adulto", category: "adult_content", reason: "Conteúdo sexual explícito pede contexto, conversa e um acordo adequado para esta fase", file: "adult-content-regulators.txt", theme: "adult_content"},
 	}
-	groups := make([]policy.RuleGroup, 0, len(seeds))
+	groups := make([]policy.RuleGroup, 0, len(seeds)+16)
 	for _, seed := range seeds {
+		action, err := presetAction(preset.Themes, seed.theme)
+		if err != nil {
+			return nil, err
+		}
 		path := filepath.Join(catalogDir, seed.file)
 		domains, err := config.LoadDomains(path)
 		if err != nil {
-			return nil, fmt.Errorf("carregar preset %q: %w", preset.id, err)
+			return nil, fmt.Errorf("carregar preset %q: %w", preset.ID, err)
 		}
 		groups = append(groups, policy.RuleGroup{
-			ID: seed.id, Name: seed.name, Action: seed.action, Category: seed.category,
+			ID: seed.id, Name: seed.name, Action: action, Category: seed.category,
 			Reason: seed.reason, Domains: append([]string{}, domains...),
 			DefaultDomains: append([]string{}, domains...), DomainSource: path,
 		})
 	}
+	var services serviceCatalog
+	if err := readCatalogJSON(filepath.Join(catalogDir, "service-pools.json"), &services); err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(services.Services))
+	for serviceID := range services.Services {
+		ids = append(ids, serviceID)
+	}
+	sort.Strings(ids)
+	for _, serviceID := range ids {
+		service := services.Services[serviceID]
+		action, exists := preset.ServiceOverrides[serviceID]
+		if !exists {
+			var err error
+			action, err = presetAction(preset.Themes, service.Theme)
+			if err != nil {
+				return nil, err
+			}
+		}
+		path := filepath.Join(catalogDir, service.DomainSource)
+		domains, err := config.LoadDomains(path)
+		if err != nil {
+			return nil, fmt.Errorf("carregar serviço %q: %w", serviceID, err)
+		}
+		groups = append(groups, policy.RuleGroup{
+			ID: "service-" + serviceID, Name: service.Label, Action: action, Category: service.Theme,
+			Reason: serviceReason(service.Theme), Domains: append([]string{}, domains...),
+			DefaultDomains: append([]string{}, domains...), DomainSource: path,
+		})
+	}
 	return groups, nil
+}
+
+func readCatalogJSON(path string, target any) error {
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("ler catálogo %s: %w", path, err)
+	}
+	if err := json.Unmarshal(contents, target); err != nil {
+		return fmt.Errorf("decodificar catálogo %s: %w", path, err)
+	}
+	return nil
+}
+
+func presetAction(themes map[string]policy.Action, theme string) (policy.Action, error) {
+	action := themes[theme]
+	switch action {
+	case policy.ActionAllow, policy.ActionBlock, policy.ActionObserve:
+		return action, nil
+	default:
+		return "", fmt.Errorf("ação ausente ou inválida para tema %q", theme)
+	}
+}
+
+func serviceReason(theme string) string {
+	switch theme {
+	case "messaging_and_communities":
+		return "Comunidades e mensagens também são espaços de amizade; o combinado deve preservar contato e segurança"
+	case "games_and_social_play":
+		return "Jogos online misturam brincadeira, criação, compras e contato com outras pessoas"
+	case "social_video":
+		return "Vídeo social mistura criação, aprendizado, publicidade e disputa por atenção"
+	default:
+		return "Redes sociais misturam convivência, entretenimento, publicidade e pressão por atenção"
+	}
 }
 
 func withCORS(next http.Handler) http.Handler {

@@ -3,16 +3,16 @@ import { api, type HouseRegistration, setToken } from '../api'
 import { Logo } from '../components'
 
 const presets = [
-  { id: 'accompanied', name: 'Acompanhado', phase: 'por volta de 6–9', description: 'Protege apostas, conteúdo adulto e redes sociais.' },
-  { id: 'exploring', name: 'Explorando', phase: 'por volta de 10–13', description: 'Protege apostas e conteúdo adulto; observa redes sociais.' },
-  { id: 'guided', name: 'Autonomia guiada', phase: 'por volta de 14–17', description: 'Protege apostas; observa conteúdo adulto e redes sociais.' },
+  { id: 'acompanhado', name: 'Acompanhado', phase: 'por volta de 6–9', description: 'Protege apostas, conteúdo adulto, redes sociais e vídeo social.' },
+  { id: 'explorando', name: 'Explorando', phase: 'por volta de 10–13', description: 'Protege apostas e conteúdo adulto; observa os serviços sociais.' },
+  { id: 'autonomia-guiada', name: 'Autonomia guiada', phase: 'por volta de 14–17', description: 'Mantém proteções essenciais e libera serviços sociais.' },
 ]
 
 export function Register() {
   const [invitationCode, setInvitationCode] = useState('')
   const [houseName, setHouseName] = useState('')
   const [profileName, setProfileName] = useState('')
-  const [preset, setPreset] = useState('exploring')
+  const [preset, setPreset] = useState('explorando')
   const [created, setCreated] = useState<HouseRegistration | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)

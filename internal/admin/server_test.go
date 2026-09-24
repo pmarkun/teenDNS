@@ -98,7 +98,7 @@ func TestRegisterHouseConsumesInvitationAndScopesAdminToken(t *testing.T) {
 	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), "dns.teendns.test", "operator-secret")
 
 	register := func() *httptest.ResponseRecorder {
-		body := bytes.NewBufferString(`{"invitation_code":"convite-unico","house_name":"Casa Silva","profile_name":"Lia","preset":"exploring"}`)
+		body := bytes.NewBufferString(`{"invitation_code":"convite-unico","house_name":"Casa Silva","profile_name":"Lia","preset":"explorando"}`)
 		request := httptest.NewRequest(http.MethodPost, "/api/v1/houses", body)
 		response := httptest.NewRecorder()
 		server.Handler().ServeHTTP(response, request)
@@ -116,7 +116,7 @@ func TestRegisterHouseConsumesInvitationAndScopesAdminToken(t *testing.T) {
 	if created.House.Name != "Casa Silva" || created.AdminToken == "" || created.Profile.HouseID != created.House.ID {
 		t.Fatalf("unexpected registration: %+v", created)
 	}
-	if len(created.Profile.Groups) != 3 || created.Profile.Groups[2].Action != policy.ActionObserve {
+	if len(created.Profile.Groups) != 15 || groupAction(created.Profile.Groups, "service-instagram") != policy.ActionObserve {
 		t.Fatalf("expected exploring preset groups, got %+v", created.Profile.Groups)
 	}
 
@@ -153,12 +153,12 @@ func TestRegisterHouseConsumesInvitationAndScopesAdminToken(t *testing.T) {
 func TestPresetGroupsChooseActionsWithoutStoringAge(t *testing.T) {
 	catalogDir := filepath.Join("..", "..", "catalog", "v1")
 	tests := []struct {
-		id            string
-		adult, social policy.Action
+		id                        string
+		adult, instagram, discord policy.Action
 	}{
-		{id: "accompanied", adult: policy.ActionBlock, social: policy.ActionBlock},
-		{id: "exploring", adult: policy.ActionBlock, social: policy.ActionObserve},
-		{id: "guided", adult: policy.ActionObserve, social: policy.ActionObserve},
+		{id: "acompanhado", adult: policy.ActionBlock, instagram: policy.ActionBlock, discord: policy.ActionObserve},
+		{id: "explorando", adult: policy.ActionBlock, instagram: policy.ActionObserve, discord: policy.ActionObserve},
+		{id: "autonomia-guiada", adult: policy.ActionBlock, instagram: policy.ActionAllow, discord: policy.ActionAllow},
 	}
 	for _, test := range tests {
 		t.Run(test.id, func(t *testing.T) {
@@ -166,7 +166,7 @@ func TestPresetGroupsChooseActionsWithoutStoringAge(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(groups) != 3 || groups[0].Action != policy.ActionBlock || groups[1].Action != test.adult || groups[2].Action != test.social {
+			if len(groups) != 15 || groupAction(groups, "gambling-br") != policy.ActionBlock || groupAction(groups, "adult") != test.adult || groupAction(groups, "service-instagram") != test.instagram || groupAction(groups, "service-discord") != test.discord {
 				t.Fatalf("unexpected preset: %+v", groups)
 			}
 		})
@@ -174,6 +174,15 @@ func TestPresetGroupsChooseActionsWithoutStoringAge(t *testing.T) {
 	if _, err := presetGroups("inventado", catalogDir); err == nil {
 		t.Fatal("expected unknown preset error")
 	}
+}
+
+func groupAction(groups []policy.RuleGroup, id string) policy.Action {
+	for _, group := range groups {
+		if group.ID == id {
+			return group.Action
+		}
+	}
+	return ""
 }
 
 func TestAdminRequiresBearerToken(t *testing.T) {
