@@ -32,7 +32,7 @@
           "name": "Apostas",
           "action": "block",
           "category": "gambling",
-          "reason": "Serviços autorizados a oferecer apostas no Brasil",
+          "reason": "Apostas usam dinheiro real e podem criar hábitos difíceis de controlar",
           "domains": [],
           "domain_source": "catalog/v1/gambling-br-authorized.txt"
         },
@@ -41,7 +41,7 @@
           "name": "Conteúdo adulto",
           "action": "block",
           "category": "adult",
-          "reason": "Conteúdo adulto protegido pelo acordo da família",
+          "reason": "Conteúdo sexual explícito está fora do combinado deste perfil",
           "domains": ["adult.test"]
         },
         {
