@@ -1013,3 +1013,187 @@ func testConfig() config.Config {
 		}},
 	}
 }
+
+func TestSetupDownloadsConfiguredFiles(t *testing.T) {
+	cfg := testConfig()
+	path := filepath.Join(t.TempDir(), "gateway.json")
+	if err := config.WriteAtomic(path, cfg, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager, _ := policy.NewManager(cfg.Profiles)
+	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), testMagicLinks(), testDigestPurger(), "dns.teendns.test", "secret", testMailer())
+	server.resolverIP = "203.0.113.10"
+
+	get := func(kind string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/profiles/home/setup/"+kind, nil)
+		request.Header.Set("Authorization", "Bearer secret")
+		response := httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, request)
+		return response
+	}
+
+	rec := get("windows.bat")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("windows.bat: expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if contentType := rec.Header().Get("Content-Type"); !strings.HasPrefix(contentType, "text/plain") {
+		t.Errorf("unexpected content type %q", contentType)
+	}
+	if disposition := rec.Header().Get("Content-Disposition"); disposition == "" || !strings.Contains(disposition, "configurar-teendns.bat") {
+		t.Errorf("unexpected content disposition %q", disposition)
+	}
+	for _, want := range []string{`set "TEENDNS_HOST=p-home.dns.teendns.test"`, "dothost=%TEENDNS_HOST%:%TEENDNS_PORT%", "203.0.113.10"} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("windows.bat missing %q", want)
+		}
+	}
+
+	rec = get("windows-remove.bat")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Header().Get("Content-Disposition"), "remover-teendns.bat") {
+		t.Fatalf("windows-remove.bat: %d disposition %q", rec.Code, rec.Header().Get("Content-Disposition"))
+	}
+
+	rec = get("apple.mobileconfig")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("apple.mobileconfig: expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if contentType := rec.Header().Get("Content-Type"); contentType != "application/x-apple-aspen-config; charset=utf-8" {
+		t.Errorf("unexpected content type %q", contentType)
+	}
+	for _, want := range []string{"com.apple.dnsSettings.managed", "<string>TLS</string>", "p-home.dns.teendns.test", "203.0.113.10"} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("apple.mobileconfig missing %q", want)
+		}
+	}
+
+	rec = get("info")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("info: expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	for _, want := range []string{`"hostname":"p-home.dns.teendns.test"`, `"ip":"203.0.113.10"`, `"port":"853"`, `"test_domain":"example.com"`} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("info missing %q", want)
+		}
+	}
+}
+
+func TestSetupAppleOmitsServerAddressesWithoutPublicIP(t *testing.T) {
+	cfg := testConfig()
+	path := filepath.Join(t.TempDir(), "gateway.json")
+	if err := config.WriteAtomic(path, cfg, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager, _ := policy.NewManager(cfg.Profiles)
+	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), testMagicLinks(), testDigestPurger(), "dns.teendns.test", "secret", testMailer())
+	server.resolverIP = ""
+
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/profiles/home/setup/apple.mobileconfig", nil)
+	request.Header.Set("Authorization", "Bearer secret")
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", response.Code, response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), "ServerAddresses") {
+		t.Errorf("mobileconfig without public IP must omit ServerAddresses")
+	}
+}
+
+func TestSetupRefusesForeignHouseAndDisabledProfile(t *testing.T) {
+	cfg := config.Config{
+		Listen:      ":853",
+		Upstream:    "unbound:5353",
+		Certificate: "cert.pem",
+		PrivateKey:  "key.pem",
+		MaxTTL:      300,
+		Houses: []config.House{
+			{ID: "house-a", Name: "Casa A", AdminTokenHash: tokenHash("house-key-a")},
+		},
+		Profiles: []policy.Profile{
+			{ID: "a", HouseID: "house-a", Hostname: "p-a.dns.teendns.test", DefaultAction: policy.ActionAllow, Version: 1},
+			{ID: "b", HouseID: "house-b", Hostname: "p-b.dns.teendns.test", DefaultAction: policy.ActionAllow, Version: 1},
+			{ID: "gone", Disabled: true, Hostname: "p-gone.dns.teendns.test", DefaultAction: policy.ActionAllow, Version: 1},
+		},
+	}
+	path := filepath.Join(t.TempDir(), "gateway.json")
+	if err := config.WriteAtomic(path, cfg, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager, _ := policy.NewManager(cfg.Profiles)
+	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), testMagicLinks(), testDigestPurger(), "dns.teendns.test", "operator-secret", testMailer())
+
+	get := func(token, endpoint string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodGet, endpoint, nil)
+		request.Header.Set("Authorization", "Bearer "+token)
+		response := httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, request)
+		return response
+	}
+
+	if rec := get("house-key-a", "/api/v1/profiles/b/setup/windows.bat"); rec.Code != http.StatusNotFound {
+		t.Errorf("house A must not download house B query config, got %d", rec.Code)
+	}
+	if rec := get("operator-secret", "/api/v1/profiles/gone/setup/apple.mobileconfig"); rec.Code != http.StatusNotFound {
+		t.Errorf("disabled profile must not download config, got %d", rec.Code)
+	}
+	if rec := get("operator-secret", "/api/v1/profiles/b/setup/unknown"); rec.Code != http.StatusNotFound {
+		t.Errorf("unknown setup kind must be 404, got %d", rec.Code)
+	}
+}
+
+func TestPairingOutcomeScopedToObservingHouse(t *testing.T) {
+	cfg := config.Config{
+		Listen:      ":853",
+		Upstream:    "unbound:5353",
+		Certificate: "cert.pem",
+		PrivateKey:  "key.pem",
+		MaxTTL:      300,
+		Houses: []config.House{
+			{ID: "house-a", Name: "Casa A", AdminTokenHash: tokenHash("house-key-a")},
+		},
+		Profiles: []policy.Profile{
+			{ID: "a", HouseID: "house-a", Hostname: "p-a.dns.teendns.test", DefaultAction: policy.ActionAllow, Version: 1},
+			{ID: "b", HouseID: "house-b", Hostname: "p-b.dns.teendns.test", DefaultAction: policy.ActionAllow, Version: 1},
+		},
+	}
+	path := filepath.Join(t.TempDir(), "gateway.json")
+	if err := config.WriteAtomic(path, cfg, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager, _ := policy.NewManager(cfg.Profiles)
+	pairings := testPairing()
+	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), pairings, testMagicLinks(), testDigestPurger(), "dns.teendns.test", "operator-secret", testMailer())
+
+	challenge, err := pairings.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	check := func(token, challengeID string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/pairing/challenges/"+challengeID+"/outcome", nil)
+		request.Header.Set("Authorization", "Bearer "+token)
+		response := httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, request)
+		return response
+	}
+
+	if rec := check("house-key-a", challenge.ID); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"observed":false`) {
+		t.Fatalf("pending challenge must report unobserved, got %d %s", rec.Code, rec.Body.String())
+	}
+	if !pairings.Observe("b", challenge.DNSName) {
+		t.Fatal("observe challenge failed")
+	}
+	if rec := check("house-key-a", challenge.ID); rec.Code != http.StatusNotFound {
+		t.Fatalf("house A must not see house B outcome, got %d", rec.Code)
+	}
+	second, _ := pairings.Create()
+	if !pairings.Observe("a", second.DNSName) {
+		t.Fatal("observe second challenge failed")
+	}
+	if rec := check("house-key-a", second.ID); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"observed":true`) || !strings.Contains(rec.Body.String(), `"profile_id":"a"`) {
+		t.Fatalf("house A must see its own profile outcome, got %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := check("operator-secret", challenge.ID); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"profile_id":"b"`) {
+		t.Fatalf("operator must see any observed profile, got %d %s", rec.Code, rec.Body.String())
+	}
+}

@@ -29,6 +29,7 @@ import (
 	"github.com/pmarkun/teendns/internal/mail"
 	"github.com/pmarkun/teendns/internal/pairing"
 	"github.com/pmarkun/teendns/internal/policy"
+	"github.com/pmarkun/teendns/internal/setup"
 )
 
 // DigestPurger removes a deleted house's accumulated digest data. Satisfied
@@ -48,6 +49,9 @@ type Server struct {
 	magicLinks     *magiclink.Manager
 	digest         DigestPurger
 	hostnameSuffix string
+	resolverIP     string
+	dnsPort        string
+	testDomain     string
 	token          string
 	catalogDir     string
 	mailer         mail.Sender
@@ -162,6 +166,35 @@ type youthProfile struct {
 	Rules []youthRule `json:"rules"`
 }
 
+// pairingOutcomeResponse is the scoped counterpart of pairing.Status: it tells
+// the panel whether a device already resolved the challenge and, if so, via
+// which of the house's profiles — without ever exposing a session token.
+type pairingOutcomeResponse struct {
+	Observed  bool   `json:"observed"`
+	ProfileID string `json:"profile_id,omitempty"`
+}
+
+// setupInfoResponse carries the neutral values for the manual configuration
+// section: hostname, public resolver IP (may be empty in the lab), DoT port
+// and the domain used by scripts for their resolution test.
+type setupInfoResponse struct {
+	Hostname   string `json:"hostname"`
+	IP         string `json:"ip"`
+	Port       string `json:"port"`
+	TestDomain string `json:"test_domain"`
+}
+
+const (
+	defaultDNSPort        = "853"
+	defaultDNSTestDomain  = "example.com"
+	setupBatchFilename    = "configurar-teendns.bat"
+	setupRemoveFilename   = "remover-teendns.bat"
+	setupProfileFilename  = "teendns.mobileconfig"
+	setupWindowsMime      = "text/plain; charset=utf-8"
+	setupAppleMime        = "application/x-apple-aspen-config; charset=utf-8"
+	setupInfoMime         = "application/json; charset=utf-8"
+)
+
 func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, events *gateway.EventBuffer, pairings *pairing.Manager, magicLinks *magiclink.Manager, digest DigestPurger, hostnameSuffix, token string, mailer mail.Sender) (*Server, error) {
 	if strings.TrimSpace(token) == "" {
 		return nil, errors.New("admin token is required")
@@ -181,6 +214,11 @@ func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, e
 	if hostnameSuffix == "" {
 		hostnameSuffix = "dns.teendns.test"
 	}
+	normalizedSuffix := strings.TrimSuffix(strings.ToLower(hostnameSuffix), ".")
+	resolverIP := strings.TrimSpace(os.Getenv("TEENDNS_DNS_PUBLIC_IP"))
+	if resolverIP == "" {
+		resolverIP = setup.ResolverIP(normalizedSuffix)
+	}
 	return &Server{
 		configPath:     configPath,
 		config:         cloneConfig(cfg),
@@ -189,7 +227,10 @@ func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, e
 		pairings:       pairings,
 		magicLinks:     magicLinks,
 		digest:         digest,
-		hostnameSuffix: strings.TrimSuffix(strings.ToLower(hostnameSuffix), "."),
+		hostnameSuffix: normalizedSuffix,
+		resolverIP:     resolverIP,
+		dnsPort:        environmentOrDefault("TEENDNS_DNS_PORT", defaultDNSPort),
+		testDomain:     environmentOrDefault("TEENDNS_DNS_TEST_DOMAIN", defaultDNSTestDomain),
 		token:          token,
 		catalogDir:     environmentOrDefault("TEENDNS_CATALOG_DIR", "catalog/v1"),
 		mailer:         mailer,
@@ -220,6 +261,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/admin/guard", s.adminGuard)
 	mux.HandleFunc("POST /api/v1/pairing/challenges", s.createPairingChallenge)
 	mux.HandleFunc("GET /api/v1/pairing/challenges/{id}", s.pairingChallengeStatus)
+	mux.HandleFunc("GET /api/v1/pairing/challenges/{id}/outcome", s.authorize(s.pairingChallengeOutcome))
 	mux.HandleFunc("GET /api/v1/youth/profile", s.youthProfile)
 	mux.HandleFunc("POST /api/v1/houses", s.registerHouse)
 	mux.HandleFunc("GET /api/v1/houses", s.authorize(s.listHouses))
@@ -694,6 +736,28 @@ func (s *Server) pairingChallengeStatus(writer http.ResponseWriter, request *htt
 	writeJSON(writer, http.StatusOK, status)
 }
 
+// pairingChallengeOutcome reports, for the responsible side of the flow, which
+// profile (if any) observed a challenge's DNS query. It is scoped to the
+// authenticated house so a house cannot probe challenges it does not own.
+func (s *Server) pairingChallengeOutcome(writer http.ResponseWriter, request *http.Request) {
+	profileID, ok := s.pairings.Outcome(request.PathValue("id"))
+	if !ok {
+		writeError(writer, http.StatusNotFound, errors.New("pairing challenge not found or expired"))
+		return
+	}
+	writer.Header().Set("Cache-Control", "no-store")
+	if profileID == "" {
+		writeJSON(writer, http.StatusOK, pairingOutcomeResponse{Observed: false})
+		return
+	}
+	profile, ok := s.findProfile(profileID)
+	if !ok || !scopeAllows(requestScope(request), profile) {
+		writeError(writer, http.StatusNotFound, errors.New("perfil não encontrado"))
+		return
+	}
+	writeJSON(writer, http.StatusOK, pairingOutcomeResponse{Observed: true, ProfileID: profileID})
+}
+
 func (s *Server) youthProfile(writer http.ResponseWriter, request *http.Request) {
 	sessionToken := strings.TrimPrefix(request.Header.Get("Authorization"), "Bearer ")
 	profileID, ok := s.pairings.Profile(sessionToken)
@@ -789,6 +853,10 @@ func (s *Server) profileResource(writer http.ResponseWriter, request *http.Reque
 		s.updateProfilePackage(writer, request, id, parts[2])
 		return
 	}
+	if len(parts) == 3 && parts[1] == "setup" && request.Method == http.MethodGet {
+		s.serveSetupFile(writer, profile, parts[2])
+		return
+	}
 	if len(parts) != 1 {
 		writeError(writer, http.StatusNotFound, errors.New("resource not found"))
 		return
@@ -863,6 +931,70 @@ func (s *Server) profileResource(writer http.ResponseWriter, request *http.Reque
 		writer.Header().Set("Allow", "GET, PUT, DELETE")
 		writeError(writer, http.StatusMethodNotAllowed, errors.New("method not allowed"))
 	}
+}
+
+// serveSetupFile generates, on request, the per-profile device configuration
+// for a kind in {info, windows.bat, windows-remove.bat, apple.mobileconfig}.
+// The profile has already passed the house-scope check in profileResource;
+// here we only refuse disabled profiles, whose endpoints can no longer be used.
+func (s *Server) serveSetupFile(writer http.ResponseWriter, profile policy.Profile, kind string) {
+	if profile.Disabled {
+		writeError(writer, http.StatusNotFound, errors.New("perfil não encontrado"))
+		return
+	}
+	switch kind {
+	case "info":
+		writer.Header().Set("Cache-Control", "no-store")
+		writeJSON(writer, http.StatusOK, setupInfoResponse{
+			Hostname: profile.Hostname, IP: s.resolverIP, Port: s.dnsPort, TestDomain: s.testDomain,
+		})
+		return
+	case "windows.bat":
+		content, err := setup.WindowsInstallBat(s.setupParams(profile))
+		if err != nil {
+			writeError(writer, http.StatusUnprocessableEntity, err)
+			return
+		}
+		writeSetupFile(writer, setupWindowsMime, setupBatchFilename, content)
+		return
+	case "windows-remove.bat":
+		content, err := setup.WindowsRemoveBat(s.setupParams(profile))
+		if err != nil {
+			writeError(writer, http.StatusUnprocessableEntity, err)
+			return
+		}
+		writeSetupFile(writer, setupWindowsMime, setupRemoveFilename, content)
+		return
+	case "apple.mobileconfig":
+		content, err := setup.AppleMobileConfig(s.setupParams(profile))
+		if err != nil {
+			writeError(writer, http.StatusUnprocessableEntity, err)
+			return
+		}
+		writeSetupFile(writer, setupAppleMime, setupProfileFilename, string(content))
+		return
+	default:
+		writeError(writer, http.StatusNotFound, errors.New("recurso de configuração não encontrado"))
+	}
+}
+
+func (s *Server) setupParams(profile policy.Profile) setup.Params {
+	return setup.Params{
+		Hostname:   profile.Hostname,
+		IP:         s.resolverIP,
+		Port:       s.dnsPort,
+		TestDomain: s.testDomain,
+	}
+}
+
+// writeSetupFile streams a generated artifact as an attachment so the browser
+// saves it with a stable, neutral filename.
+func writeSetupFile(writer http.ResponseWriter, contentType, filename, content string) {
+	writer.Header().Set("Content-Type", contentType)
+	writer.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+	writer.Header().Set("X-Content-Type-Options", "nosniff")
+	writer.Header().Set("Cache-Control", "no-store")
+	_, _ = io.WriteString(writer, content)
 }
 
 func (s *Server) updateProfilePackage(writer http.ResponseWriter, request *http.Request, profileID, packageID string) {
