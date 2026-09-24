@@ -13,6 +13,65 @@ fonte comunitária seja apresentada como decisão de um órgão público.
 | `adult-content-regulators.txt` | Ofcom e Comissão Europeia | `block` | Serviços identificados por reguladores como serviços adultos ou plataformas pornográficas. |
 | `social-platforms.txt` | Registro Category 1 da Ofcom | `observe` | Portas de entrada canônicas de grandes serviços sociais, de mensageria, vídeo, fórum e jogo social. |
 | `tracking-observe.txt` | The Block List Project | `observe` | Domínios técnicos associados a rastreamento ou analytics. Não devem ser bloqueados por padrão na v1. |
+| `security-threats.txt` | The Block List Project | `block` | Domínios associados a phishing ou ransomware; é proteção técnica, não controle de conteúdo. |
+| `services/*.txt` | Documentação oficial dos serviços | `observe` | Pools pequenos para controlar um serviço específico no navegador e no app sem incluir infraestrutura compartilhada. |
+
+Os metadados ficam em:
+
+- `service-pools.json`: tema, arquivo, evidências e dependências compartilhadas
+  deliberadamente excluídas de cada serviço;
+- `presets.json`: pontos de partida **Acompanhado**, **Explorando** e
+  **Autonomia guiada**, sem armazenar idade ou data de nascimento;
+- `manifest.json`: origem, licença, data de coleta, hash e contagem de todas as
+  listas geradas.
+
+## Pools por serviço
+
+Cada arquivo em `services/` contém apenas sufixos considerados específicos do
+provedor. A regra de aplicação é **sufixo DNS**, incluindo o próprio domínio:
+`cdninstagram.com` corresponde também a `scontent.cdninstagram.com`.
+
+| Tema | Serviços iniciais |
+| --- | --- |
+| Redes sociais | Facebook, Instagram, Reddit, Snapchat, Threads e X |
+| Vídeo social | TikTok, Twitch e YouTube |
+| Mensageria e comunidades | Discord, Telegram e WhatsApp |
+| Jogos com interação social | Roblox |
+
+Os pools têm ação `observe` por padrão. Eles existem para uma decisão explícita
+da casa — por exemplo, pausar TikTok ou Instagram — e não porque o catálogo
+classifique todo o conteúdo do serviço como inadequado.
+
+### Por que há domínios excluídos
+
+Aplicativos grandes usam infraestrutura que também atende outros produtos. O
+Instagram, por exemplo, depende de domínios compartilhados da Meta; o YouTube
+depende de domínios genéricos do Google; TikTok e Roblox usam redes e nuvens que
+podem hospedar terceiros. Esses sufixos aparecem em
+`shared_dependencies_excluded`, mas **não** nas listas de bloqueio.
+
+Bloqueá-los aumentaria a cobertura, porém poderia quebrar WhatsApp, busca,
+login, notificações, outros jogos ou sites sem relação com a escolha feita. A
+v1 prefere uma pequena chance de passagem residual a um sobrebloqueio invisível.
+Se um app continuar operando, a próxima evidência deve vir de teste de rede em
+aparelho real antes de promover um domínio compartilhado para o pool.
+
+## Presets conscientes
+
+Os presets são pontos de partida editáveis, não diagnósticos nem classificações
+da pessoa:
+
+- **Acompanhado:** bloqueia por padrão plataformas sociais e vídeo social;
+  mensageria, comunidades e jogos sociais ficam em observação para preservar
+  contato, escola e brincadeira combinada.
+- **Explorando:** mantém serviços mistos em observação e protege contra adulto,
+  apostas e ameaças técnicas.
+- **Autonomia guiada:** permite serviços mistos e mantém as proteções essenciais;
+  a conversa parte do uso observado e das escolhas da própria casa.
+
+Em todos eles, adulto, apostas, phishing e ransomware começam bloqueados;
+rastreadores começam em observação para evitar quebra silenciosa de sites. Uma
+família pode alterar qualquer ação ou serviço sem trocar de preset.
 
 `unknown` não possui arquivo: é o estado calculado quando não há correspondência
 no catálogo.
@@ -26,10 +85,14 @@ no catálogo.
 - A correspondência inicial deve ser exata. Incluir subdomínios é uma decisão
   separada da política, porque bloquear uma zona inteira aumenta muito o risco
   de falso positivo.
-- Domínios auxiliares, CDNs e APIs não foram inferidos a partir do nome de um
-  serviço. Eles só devem entrar quando houver fonte ou validação específica.
+- Domínios auxiliares, CDNs e APIs entram apenas com documentação do provedor e
+  revisão manual. Infraestrutura compartilhada é registrada, mas não bloqueada.
 - O catálogo descreve o domínio; a política familiar decide `allow`, `observe`
   ou `block` e pode criar exceções mais específicas.
+- Um pool de serviço é melhor esforço. Cache, conexão já aberta, VPN, DNS próprio
+  do app e mudanças de infraestrutura ainda podem permitir tráfego residual.
+- O catálogo não trata rede social, jogo ou mensageria como dano por si só. A
+  intervenção é proporcional, reversível e explicável.
 
 ## Fontes avaliadas, mas não incorporadas
 
@@ -81,9 +144,14 @@ uv run scripts/build-catalog-v1.py
 ```
 
 O script baixa os registros públicos que possuem formato de dados, normaliza os
-domínios, rejeita entradas inválidas e grava contagens, URLs, datas e hashes em
-`manifest.json`. `SHA256SUMS` permite conferir os artefatos gerados.
+domínios, rejeita entradas inválidas, valida a separação dos pools e grava
+contagens, URLs, datas e hashes em `manifest.json`. `SHA256SUMS` permite conferir
+os artefatos gerados.
 
 As relações manuais da Ofcom e da Comissão Europeia ficam no script porque
 essas páginas não oferecem uma API ou arquivo de domínios apropriado. Ao
 atualizá-las, a revisão deve confrontar diretamente as páginas regulatórias.
+Os pools de serviço seguem a mesma regra: são uma compilação factual pequena a
+partir de documentação oficial, não uma cópia de listas comunitárias com licença
+incerta. A metodologia e o protocolo de teste estão em
+[`docs/metodologia-catalogo-v1.md`](../../docs/metodologia-catalogo-v1.md).

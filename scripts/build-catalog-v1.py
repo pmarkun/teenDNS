@@ -26,6 +26,12 @@ SPA_URL = (
 TRACKING_URL = (
     "https://blocklistproject.github.io/Lists/alt-version/tracking-nl.txt"
 )
+PHISHING_URL = (
+    "https://blocklistproject.github.io/Lists/alt-version/phishing-nl.txt"
+)
+RANSOMWARE_URL = (
+    "https://blocklistproject.github.io/Lists/alt-version/ransomware-nl.txt"
+)
 OFCOM_URL = (
     "https://www.ofcom.org.uk/online-safety/protecting-children/"
     "enforcement-programme-to-protect-children-from-encountering-"
@@ -165,6 +171,277 @@ youtube.com
 SOCIAL_LEGACY_DOMAINS = ["twitter.com"]
 
 
+# Service pools are intentionally small sets of provider-specific DNS suffixes.
+# A pool is useful for a family choice such as "pause TikTok"; it is not a
+# content rating or a recommendation to block the service. Shared infrastructure
+# is documented separately and never enters the generated blocking list.
+SERVICE_POOLS = {
+    "discord": {
+        "label": "Discord",
+        "theme": "messaging_and_communities",
+        "domains": [
+            "discord.com",
+            "discord.gg",
+            "discord.media",
+            "discord.gift",
+            "discordapp.com",
+            "discordapp.net",
+            "dis.gd",
+        ],
+        "shared_dependencies": ["googleapis.com", "gstatic.com"],
+        "evidence_urls": [
+            "https://support.discord.com/hc/en-us/articles/360042987951-Discordapp-com-is-now-Discord-com",
+            "https://discord.com/developers/docs/reference",
+        ],
+    },
+    "facebook": {
+        "label": "Facebook",
+        "theme": "social_platforms",
+        "domains": ["facebook.com", "fb.com"],
+        "shared_dependencies": [
+            "facebook.net",
+            "fbcdn.net",
+            "fbsbx.com",
+        ],
+        "evidence_urls": [
+            "https://developers.facebook.com/docs/graph-api/overview/",
+            "https://www.facebook.com/help/",
+        ],
+    },
+    "instagram": {
+        "label": "Instagram",
+        "theme": "social_platforms",
+        "domains": ["instagram.com", "cdninstagram.com", "ig.me"],
+        "shared_dependencies": [
+            "facebook.com",
+            "facebook.net",
+            "fbcdn.net",
+            "fbsbx.com",
+        ],
+        "evidence_urls": [
+            "https://developers.facebook.com/docs/instagram-platform/",
+            "https://help.instagram.com/",
+        ],
+    },
+    "reddit": {
+        "label": "Reddit",
+        "theme": "social_platforms",
+        "domains": [
+            "reddit.com",
+            "redd.it",
+            "redditmedia.com",
+            "redditspace.com",
+            "redditstatic.com",
+        ],
+        "shared_dependencies": ["fastly.net"],
+        "evidence_urls": [
+            "https://developers.reddit.com/docs/capabilities/server/splash-screen",
+            "https://support.reddithelp.com/",
+        ],
+    },
+    "roblox": {
+        "label": "Roblox",
+        "theme": "games_and_social_play",
+        "domains": ["roblox.com", "rbxcdn.com", "robloxapi.com"],
+        "shared_dependencies": [
+            "amazonaws.com",
+            "cloudfront.net",
+            "googleapis.com",
+        ],
+        "evidence_urls": [
+            "https://create.roblox.com/docs/cloud/open-cloud",
+            "https://en.help.roblox.com/hc/en-us/articles/203312840-Firewall-and-Router-Issues",
+        ],
+    },
+    "snapchat": {
+        "label": "Snapchat",
+        "theme": "social_platforms",
+        "domains": [
+            "snapchat.com",
+            "snap.com",
+            "snapkit.com",
+            "sc-cdn.net",
+        ],
+        "shared_dependencies": ["googleapis.com", "gstatic.com"],
+        "evidence_urls": [
+            "https://developers.snap.com/",
+            "https://developers.snap.com/marketing-api/Ads-API/dynamic-product-ads",
+        ],
+    },
+    "telegram": {
+        "label": "Telegram",
+        "theme": "messaging_and_communities",
+        "domains": ["telegram.org", "telegram.me", "t.me", "telesco.pe"],
+        "shared_dependencies": [],
+        "evidence_urls": [
+            "https://core.telegram.org/api/links",
+            "https://core.telegram.org/bots/api",
+        ],
+    },
+    "threads": {
+        "label": "Threads",
+        "theme": "social_platforms",
+        "domains": ["threads.com", "threads.net"],
+        "shared_dependencies": [
+            "facebook.com",
+            "facebook.net",
+            "fbcdn.net",
+            "fbsbx.com",
+            "instagram.com",
+        ],
+        "evidence_urls": [
+            "https://developers.facebook.com/docs/threads/",
+            "https://help.instagram.com/769983657850450",
+        ],
+    },
+    "tiktok": {
+        "label": "TikTok",
+        "theme": "social_video",
+        "domains": [
+            "tiktok.com",
+            "tiktokapis.com",
+            "tiktokcdn.com",
+            "tiktokcdn-eu.com",
+            "tiktokv.com",
+            "muscdn.com",
+            "musical.ly",
+        ],
+        "shared_dependencies": [
+            "akamaized.net",
+            "byteimg.com",
+            "byteoversea.com",
+            "byteoversea.net",
+            "ibyteimg.com",
+            "ibytedtos.com",
+            "pstatp.com",
+        ],
+        "evidence_urls": [
+            "https://developers.tiktok.com/doc/content-posting-api-get-started/",
+            "https://support.tiktok.com/",
+        ],
+    },
+    "twitch": {
+        "label": "Twitch",
+        "theme": "social_video",
+        "domains": ["twitch.tv", "twitchcdn.net", "jtvnw.net"],
+        "shared_dependencies": ["amazonaws.com", "cloudfront.net"],
+        "evidence_urls": [
+            "https://dev.twitch.tv/docs/embed/",
+            "https://help.twitch.tv/",
+        ],
+    },
+    "whatsapp": {
+        "label": "WhatsApp",
+        "theme": "messaging_and_communities",
+        "domains": ["whatsapp.com", "whatsapp.net"],
+        "shared_dependencies": [
+            "facebook.com",
+            "facebook.net",
+            "fbcdn.net",
+            "fbsbx.com",
+        ],
+        "evidence_urls": [
+            "https://developers.facebook.com/docs/whatsapp/",
+            "https://faq.whatsapp.com/",
+        ],
+    },
+    "x": {
+        "label": "X",
+        "theme": "social_platforms",
+        "domains": ["x.com", "twitter.com", "t.co", "twimg.com"],
+        "shared_dependencies": [],
+        "evidence_urls": [
+            "https://developer.x.com/en/docs/x-for-websites/overview",
+            "https://help.x.com/en/using-x/x-urls",
+        ],
+    },
+    "youtube": {
+        "label": "YouTube",
+        "theme": "social_video",
+        "domains": [
+            "youtube.com",
+            "youtube-nocookie.com",
+            "youtu.be",
+            "ytimg.com",
+            "googlevideo.com",
+            "youtubei.googleapis.com",
+        ],
+        "shared_dependencies": [
+            "google.com",
+            "googleapis.com",
+            "googleusercontent.com",
+            "gstatic.com",
+            "ggpht.com",
+        ],
+        "evidence_urls": [
+            "https://support.google.com/youtube/answer/171780",
+            "https://support.google.com/a/answer/6334001",
+        ],
+    },
+}
+
+
+PRESETS = {
+    "version": 1,
+    "principles": [
+        "A escolha e do domicilio; o preset e apenas um ponto de partida.",
+        "Nenhum preset exige ou armazena data de nascimento.",
+        "Bloquear um servico nao equivale a julgar quem o utiliza.",
+        "Mensageria, estudo, criacao, comunidade e jogo podem coexistir no mesmo servico.",
+    ],
+    "presets": [
+        {
+            "id": "acompanhado",
+            "label": "Acompanhado",
+            "description": "Mais escolhas combinadas antes de liberar servicos mistos.",
+            "themes": {
+                "adult_content": "block",
+                "gambling": "block",
+                "security_threats": "block",
+                "tracking": "observe",
+                "social_platforms": "block",
+                "social_video": "block",
+                "messaging_and_communities": "observe",
+                "games_and_social_play": "observe",
+            },
+            "service_overrides": {},
+        },
+        {
+            "id": "explorando",
+            "label": "Explorando",
+            "description": "Acesso amplo com visibilidade e acordos por servico.",
+            "themes": {
+                "adult_content": "block",
+                "gambling": "block",
+                "security_threats": "block",
+                "tracking": "observe",
+                "social_platforms": "observe",
+                "social_video": "observe",
+                "messaging_and_communities": "observe",
+                "games_and_social_play": "observe",
+            },
+            "service_overrides": {},
+        },
+        {
+            "id": "autonomia-guiada",
+            "label": "Autonomia guiada",
+            "description": "Protecoes essenciais e conversa a partir do uso observado.",
+            "themes": {
+                "adult_content": "block",
+                "gambling": "block",
+                "security_threats": "block",
+                "tracking": "observe",
+                "social_platforms": "allow",
+                "social_video": "allow",
+                "messaging_and_communities": "allow",
+                "games_and_social_play": "allow",
+            },
+            "service_overrides": {},
+        },
+    ],
+}
+
+
 def fetch(url: str) -> bytes:
     # Use the host curl trust store. The uv-managed Python runtime on this
     # NixOS machine does not inherit the locally installed CA chain.
@@ -247,11 +524,44 @@ def write_atomic(path: Path, payload: bytes) -> None:
         raise
 
 
+def validate_service_pools() -> None:
+    known_actions = {"allow", "observe", "block"}
+    claimed: dict[str, str] = {}
+    for service_id, pool in SERVICE_POOLS.items():
+        if not re.fullmatch(r"[a-z0-9-]+", service_id):
+            raise ValueError(f"invalid service id: {service_id!r}")
+        domains = normalized(pool["domains"])
+        if len(domains) != len(pool["domains"]):
+            raise ValueError(f"duplicate domain in service pool: {service_id}")
+        for domain in domains:
+            previous = claimed.setdefault(domain, service_id)
+            if previous != service_id:
+                raise ValueError(
+                    f"{domain} is exclusive to both {previous} and {service_id}"
+                )
+        for domain in pool["shared_dependencies"]:
+            normalize_domain(domain)
+        if not pool["evidence_urls"]:
+            raise ValueError(f"service pool without evidence: {service_id}")
+
+    for preset in PRESETS["presets"]:
+        actions = set(preset["themes"].values())
+        if not actions <= known_actions:
+            raise ValueError(f"unknown action in preset {preset['id']}: {actions}")
+
+
 def main() -> None:
     fetched_at = datetime.now(UTC).replace(microsecond=0).isoformat()
+    validate_service_pools()
     spa_payload = fetch(SPA_URL)
     tracking_payload = fetch(TRACKING_URL)
+    phishing_payload = fetch(PHISHING_URL)
+    ransomware_payload = fetch(RANSOMWARE_URL)
     tracking_domains, tracking_rejected = parse_domain_list(tracking_payload)
+    phishing_domains, phishing_rejected = parse_domain_list(phishing_payload)
+    ransomware_domains, ransomware_rejected = parse_domain_list(
+        ransomware_payload
+    )
 
     lists = {
         "adult-content-regulators.txt": normalized(
@@ -262,6 +572,44 @@ def main() -> None:
             SOCIAL_DOMAINS + SOCIAL_LEGACY_DOMAINS
         ),
         "tracking-observe.txt": tracking_domains,
+        "security-threats.txt": sorted(
+            set(phishing_domains) | set(ransomware_domains)
+        ),
+    }
+    for service_id, pool in SERVICE_POOLS.items():
+        lists[f"services/{service_id}.txt"] = normalized(pool["domains"])
+
+    service_pools = {
+        "version": 1,
+        "generated_at": fetched_at,
+        "matching": "domain suffix, including the apex itself",
+        "default_action": "observe",
+        "warning": (
+            "Pools are best-effort service controls, not content ratings. "
+            "Shared dependencies are excluded to reduce collateral blocking."
+        ),
+        "services": {
+            service_id: {
+                "label": pool["label"],
+                "theme": pool["theme"],
+                "domain_source": f"services/{service_id}.txt",
+                "domains": normalized(pool["domains"]),
+                "shared_dependencies_excluded": normalized(
+                    pool["shared_dependencies"]
+                ),
+                "evidence_urls": pool["evidence_urls"],
+                "confidence": "official_docs_manual_mapping",
+            }
+            for service_id, pool in sorted(SERVICE_POOLS.items())
+        },
+    }
+    metadata_files = {
+        "service-pools.json": (
+            json.dumps(service_pools, indent=2, ensure_ascii=False) + "\n"
+        ).encode(),
+        "presets.json": (
+            json.dumps(PRESETS, indent=2, ensure_ascii=False) + "\n"
+        ).encode(),
     }
 
     source_manifest = {
@@ -287,6 +635,21 @@ def main() -> None:
                 "category": "tracking",
                 "default_action": "observe",
                 "confidence": "community_curated",
+            },
+            "security-threats.txt": {
+                "category": "security_threats",
+                "default_action": "block",
+                "confidence": "community_curated",
+                "scope": "phishing and ransomware",
+            },
+            **{
+                f"services/{service_id}.txt": {
+                    "category": pool["theme"],
+                    "service": service_id,
+                    "default_action": "observe",
+                    "confidence": "official_docs_manual_mapping",
+                }
+                for service_id, pool in sorted(SERVICE_POOLS.items())
             },
         },
         "sources": [
@@ -331,6 +694,38 @@ def main() -> None:
                 "license": "Unlicense; downloaded snapshot header states MIT",
                 "output": "tracking-observe.txt",
             },
+            {
+                "id": "block-list-project-phishing",
+                "publisher": "The Block List Project",
+                "url": PHISHING_URL,
+                "retrieved_at": fetched_at,
+                "sha256": sha256(phishing_payload),
+                "license": "MIT",
+                "output": "security-threats.txt",
+            },
+            {
+                "id": "block-list-project-ransomware",
+                "publisher": "The Block List Project",
+                "url": RANSOMWARE_URL,
+                "retrieved_at": fetched_at,
+                "sha256": sha256(ransomware_payload),
+                "license": "MIT",
+                "output": "security-threats.txt",
+            },
+            {
+                "id": "official-service-documentation",
+                "publisher": "Service providers",
+                "retrieved_at": fetched_at,
+                "extraction": (
+                    "manual provider-specific suffix mapping; see "
+                    "service-pools.json evidence_urls"
+                ),
+                "license": "factual domain identifiers only; no list copied",
+                "outputs": sorted(
+                    f"services/{service_id}.txt"
+                    for service_id in SERVICE_POOLS
+                ),
+            },
         ],
         "counts": {name: len(domains) for name, domains in lists.items()},
         "rejected": {
@@ -338,12 +733,21 @@ def main() -> None:
                 "count": len(tracking_rejected),
                 "entries": tracking_rejected,
                 "reason": "not a valid hostname under the teenDNS v1 grammar",
-            }
+            },
+            "security-threats.txt": {
+                "count": len(phishing_rejected) + len(ransomware_rejected),
+                "entries": sorted(
+                    set(phishing_rejected) | set(ransomware_rejected)
+                ),
+                "reason": "not a valid hostname under the teenDNS v1 grammar",
+            },
         },
     }
 
     for name, domains in lists.items():
         write_atomic(OUTPUT / name, list_payload(domains))
+    for name, payload in metadata_files.items():
+        write_atomic(OUTPUT / name, payload)
 
     manifest_payload = (
         json.dumps(source_manifest, indent=2, ensure_ascii=False) + "\n"
@@ -351,7 +755,7 @@ def main() -> None:
     write_atomic(OUTPUT / "manifest.json", manifest_payload)
 
     checksum_lines = []
-    for name in sorted([*lists, "manifest.json"]):
+    for name in sorted([*lists, *metadata_files, "manifest.json"]):
         payload = (OUTPUT / name).read_bytes()
         checksum_lines.append(f"{sha256(payload)}  {name}")
     write_atomic(
