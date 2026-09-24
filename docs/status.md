@@ -37,7 +37,21 @@ Novos casos cobertos por testes:
   primeiro e-mail como principal;
 - magic link é aceito para qualquer e-mail da lista da casa (incluindo caixa
   alta), sem cair na lista de espera;
-- a carga do `gateway.json` migra `email` → `emails` para casas existentes.
+- a carga do `gateway.json` migra `email` → `emails` para casas existentes;
+- `GET /api/v1/profiles/{id}/setup/info` expõe nome do servidor, IP (quando
+  conhecido), porta e domínio de teste — valores neutros, sem dados pessoais;
+- `GET /api/v1/profiles/{id}/setup/windows.bat`,
+  `windows-remove.bat` e `apple.mobileconfig` geram instalador e removidor
+  para Windows 24H2+ (gate `lss 26100`, DoT por perfil com
+  `autoupgrade=yes` e `udpfallback=no`) e perfil de DNS TLS com
+  `com.apple.dnsSettings.managed`, recusando perfil desativado, kind
+  desconhecido e perfil de outra casa com `404`;
+- o instalador Windows devolve `422` quando não há IP público e o perfil Apple
+  omite `ServerAddresses` nesse caso (o gateway resolve o apex do sufixo do
+  DNS quando `TEENDNS_DNS_PUBLIC_IP` não está definido);
+- `GET /api/v1/pairing/challenges/{id}/outcome` é escopado por casa: relatando
+  `observed:false`, ou o perfil que observou, e `404` para desafio de fora da
+  casa;
 
 ### Integração em containers
 
@@ -67,6 +81,30 @@ Casos confirmados:
 - chave de uma casa lista apenas seus perfis e recebe `404` para perfil alheio.
 - catálogo administrativo lista 15 pacotes prontos com contagem de domínios;
 - ligar e desligar um pacote altera a política ativa e persiste a configuração.
+
+### Configuração por aparelho (lab)
+
+Gateway e painel recriados com o código novo (`./scripts/lab-up.sh` com
+`TEENDNS_DNS_PUBLIC_IP=203.0.113.10` passado ao gateway pelo compose):
+
+- `GET /api/v1/profiles/ana/setup/info` respondeu
+  `{"hostname":"p-ana.dns.teendns.test","ip":"203.0.113.10","port":"853","test_domain":"example.com"}`;
+- `windows.bat` retornou `200` com `Content-Type: text/plain; charset=utf-8`,
+  `Content-Disposition: attachment; filename="configurar-teendns.bat"` e
+  `Cache-Control: no-store`, com `set "TEENDNS_HOST=…"`, o gate
+  `if %TEENDNS_BUILD_INT% lss 26100 goto :oldwindows` e
+  `netsh dns add encryption … autoupgrade=yes udpfallback=no`;
+- `windows-remove.bat` respondeu `200` com `filename="remover-teendns.bat"`;
+- `apple.mobileconfig` respondeu com o perfil `com.apple.dnsSettings.managed`
+  (`DNSProtocol=TLS`, `ServerAddresses` do IP configurado);
+- kind desconhecido respondeu `404` e a chamada sem chave respondeu `401`;
+- um desafio de pareamento criado pela API e resolvido pelo DoT do laboratório
+  (query `…pair.teendns.test` pelo perfil `ana`) retornou
+  `GET /api/v1/pairing/challenges/{id}/outcome` →
+  `{"observed":true,"profile_id":"ana"}`, fechando o caminho de
+  "Já instalei? Testar conexão" com prova no próprio DNS;
+- `./scripts/lab-test.sh` continuou verde após a recriação (resolução,
+  bloqueio por perfil, CNAME, cache compartilhado e recarga de política).
 
 ### Interface
 

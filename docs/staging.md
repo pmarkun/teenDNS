@@ -150,6 +150,40 @@ O envio depende de `RESEND_API_KEY`/`TEENDNS_MAIL_FROM` reais em
 `/opt/teendns/.env`; sem eles o Compose recusa subir (`:?` obrigatório, mesmo
 padrão do `TEENDNS_ADMIN_TOKEN`).
 
+## Configuração por aparelho
+
+Hackathon: cada perfil ganhou no painel uma gaveta **CONFIGURAR UM APARELHO**
+que gera, sob `GET /api/v1/profiles/{id}/setup/`, arquivos de configuração
+calculados na hora:
+
+- `info` — valores neutros usados pela interface (nome do servidor, IP quando
+  conhecido, porta `853`, domínio de teste `example.com`);
+- `windows.bat` — instalador para **Windows 11 24H2+** (gate `lss 26100`):
+  autoelevação de administrador, DoT por perfil via
+  `netsh dns add encryption server=… dothost=…:853 autoupgrade=yes
+  udpfallback=no`, DNS do Edge desativado e teste de resolução. Versões
+  antigas abortam apontando a configuração manual — não há fallback para DNS
+  claro;
+- `windows-remove.bat` — desfaz a configuração;
+- `apple.mobileconfig` — perfil `com.apple.dnsSettings.managed` com
+  `DNSProtocol=TLS`, válido para iOS, iPadOS e macOS.
+
+Os arquivos não contêm dados pessoais: só nome do servidor, IP, porta e
+domínio de teste. Revogação continua sendo por rotação de hostname — o
+endereço antigo para de funcionar e as configurações geradas antes ficam
+órfãs.
+
+O IP público vem de `TEENDNS_DNS_PUBLIC_IP`; sem ele o gateway resolve o apex
+do wildcard (`*.dns.lab.markun.com.br` → a própria VPS) na inicialização. Quando
+o IP não é conhecido, o perfil Apple sai sem `ServerAddresses` e o instalador
+Windows recusa com `422`. Em produção a VPS deve rodar com
+`TEENDNS_DNS_PUBLIC_IP=178.105.202.118` ou confiar na resolução do apex.
+
+O botão **JÁ INSTALOU? TESTAR** cria um desafio de pareamento e pergunta ao
+próprio DNS se algum aparelho do perfil respondeu
+(`GET /api/v1/pairing/challenges/{id}/outcome`, escopado por casa). Isso ainda
+não está publicado no staging — exigira uma promoção `main → production`.
+
 ## Verificações do primeiro deploy
 
 - HTTPS público retornou `200` com certificado válido;
