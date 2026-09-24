@@ -41,9 +41,12 @@ func Load(path string) (Config, error) {
 	for profileIndex := range cfg.Profiles {
 		for groupIndex := range cfg.Profiles[profileIndex].Groups {
 			group := &cfg.Profiles[profileIndex].Groups[groupIndex]
+			if group.Domains == nil {
+				group.Domains = []string{}
+			}
 			if group.DomainSource == "" {
 				if group.DefaultDomains == nil {
-					group.DefaultDomains = append([]string(nil), group.Domains...)
+					group.DefaultDomains = append([]string{}, group.Domains...)
 				}
 				continue
 			}
@@ -53,7 +56,7 @@ func Load(path string) (Config, error) {
 			}
 			group.DefaultDomains = defaults
 			if !group.Customized {
-				group.Domains = append([]string(nil), defaults...)
+				group.Domains = append([]string{}, defaults...)
 			}
 		}
 	}

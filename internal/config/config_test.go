@@ -81,6 +81,33 @@ func TestLoadAppliesDefaultTTL(t *testing.T) {
 	}
 }
 
+func TestLoadNormalizesEmptyRuleGroupDomains(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gateway.json")
+	contents := []byte(`{
+  "listen": ":853",
+  "upstream": "127.0.0.1:5353",
+  "certificate": "server.pem",
+  "private_key": "server-key.pem",
+  "profiles": [{
+    "id": "ana",
+    "hostname": "p-ana.dns.teendns.test",
+    "default_action": "allow",
+    "groups": [{"id":"adult","name":"Conteúdo adulto","action":"block"}]
+  }]
+}`)
+	if err := os.WriteFile(path, contents, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	group := cfg.Profiles[0].Groups[0]
+	if group.Domains == nil || group.DefaultDomains == nil {
+		t.Fatalf("expected empty domain lists, got %+v", group)
+	}
+}
+
 func TestLoadRejectsInvalidProfile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "gateway.json")
 	contents := []byte(`{

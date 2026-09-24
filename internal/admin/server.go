@@ -426,8 +426,8 @@ func cloneConfig(cfg config.Config) config.Config {
 		result.Profiles[index].Groups = make([]policy.RuleGroup, len(profile.Groups))
 		for groupIndex, group := range profile.Groups {
 			result.Profiles[index].Groups[groupIndex] = group
-			result.Profiles[index].Groups[groupIndex].Domains = append([]string(nil), group.Domains...)
-			result.Profiles[index].Groups[groupIndex].DefaultDomains = append([]string(nil), group.DefaultDomains...)
+			result.Profiles[index].Groups[groupIndex].Domains = append([]string{}, group.Domains...)
+			result.Profiles[index].Groups[groupIndex].DefaultDomains = append([]string{}, group.DefaultDomains...)
 		}
 	}
 	return result

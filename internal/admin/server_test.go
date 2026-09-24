@@ -101,6 +101,23 @@ func TestAdminRequiresBearerToken(t *testing.T) {
 	}
 }
 
+func TestCloneConfigPreservesEmptyDomainLists(t *testing.T) {
+	cfg := testConfig()
+	cfg.Profiles[0].Groups = []policy.RuleGroup{{
+		ID:             "adult",
+		Name:           "Conteúdo adulto",
+		Action:         policy.ActionBlock,
+		Domains:        []string{},
+		DefaultDomains: []string{},
+	}}
+
+	cloned := cloneConfig(cfg)
+	group := cloned.Profiles[0].Groups[0]
+	if group.Domains == nil || group.DefaultDomains == nil {
+		t.Fatalf("expected empty domain lists, got %+v", group)
+	}
+}
+
 func TestMergeGroupsRestoresServerDefaults(t *testing.T) {
 	existing := []policy.RuleGroup{{
 		ID:             "gambling",

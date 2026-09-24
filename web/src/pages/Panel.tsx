@@ -96,19 +96,22 @@ export function Panel() {
 
           <div className="rules-heading"><h2>REGRAS, POR ENQUANTO</h2><span>{groups.length}</span></div>
           <div className="rule-list">
-            {groups.map((group, index) => (
-              <div className="rule-row" key={group.id}>
-                <button className="group-title" onClick={() => { setEditingGroup(group); setDrawer('group') }}>
-                  <strong>{group.name}</strong>
-                  <small>{group.domains.length} {group.domains.length === 1 ? 'domínio' : 'domínios'}</small>
-                </button>
-                <select className={`action action--${group.action}`} value={group.action} onChange={(event) => void updateGroup(index, event.target.value as Action)} aria-label={`Ação para ${group.name}`}>
-                  <option value="block">Proteger</option>
-                  <option value="observe">Observar</option>
-                  <option value="allow">Permitir</option>
-                </select>
-              </div>
-            ))}
+            {groups.map((group, index) => {
+              const domainCount = group.domains?.length || 0
+              return (
+                <div className="rule-row" key={group.id}>
+                  <button className="group-title" onClick={() => { setEditingGroup(group); setDrawer('group') }}>
+                    <strong>{group.name}</strong>
+                    <small>{domainCount} {domainCount === 1 ? 'domínio' : 'domínios'}</small>
+                  </button>
+                  <select className={`action action--${group.action}`} value={group.action} onChange={(event) => void updateGroup(index, event.target.value as Action)} aria-label={`Ação para ${group.name}`}>
+                    <option value="block">Proteger</option>
+                    <option value="observe">Observar</option>
+                    <option value="allow">Permitir</option>
+                  </select>
+                </div>
+              )
+            })}
           </div>
           <div className="rule-actions">
             <button onClick={() => { setEditingGroup(null); setDrawer('group') }}>+ botar outra regra</button>
