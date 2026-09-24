@@ -1,12 +1,13 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
-import { Action, api, EventSummary, getToken, Profile, RuleGroup, setToken } from '../api'
+import { Action, api, CatalogPackage, EventSummary, getToken, Profile, RuleGroup, setToken } from '../api'
 import { Drawer, Logo } from '../components'
 
 export function Panel() {
   const [profiles, setProfiles] = useState<Profile[]>([])
+  const [packages, setPackages] = useState<CatalogPackage[]>([])
   const [selectedID, setSelectedID] = useState('')
   const [summary, setSummary] = useState<EventSummary | null>(null)
-  const [drawer, setDrawer] = useState<'group' | 'details' | 'advanced' | 'profile' | null>(null)
+  const [drawer, setDrawer] = useState<'group' | 'packages' | 'details' | 'advanced' | 'profile' | null>(null)
   const [editingGroup, setEditingGroup] = useState<RuleGroup | null>(null)
   const [status, setStatus] = useState('carregando')
   const [error, setError] = useState('')
@@ -17,12 +18,14 @@ export function Panel() {
     [profiles, selectedID],
   )
   const groups = selected?.groups || []
+  const activePackageCount = packages.filter((item) => groups.some((group) => group.id === item.id)).length
 
   const load = useCallback(async () => {
     try {
       setStatus('carregando')
-      const next = await api.profiles()
+      const [next, availablePackages] = await Promise.all([api.profiles(), api.packages()])
       setProfiles(next)
+      setPackages(availablePackages)
       const active = next.find((profile) => !profile.disabled)
       setSelectedID((current) => current || active?.id || '')
       setAuthNeeded(false)
@@ -115,6 +118,7 @@ export function Panel() {
           </div>
           <div className="rule-actions">
             <button onClick={() => { setEditingGroup(null); setDrawer('group') }}>+ botar outra regra</button>
+            <button onClick={() => setDrawer('packages')}>pacotes prontos <small>{activePackageCount}/{packages.length}</small> →</button>
             <button onClick={() => setDrawer('advanced')}>mexer nas partes nerds →</button>
           </div>
         </section>
@@ -129,6 +133,7 @@ export function Panel() {
       </aside>
 
       {drawer === 'group' && selected && <GroupDrawer profile={selected} group={editingGroup} onClose={() => setDrawer(null)} onSaved={(saved) => { setProfiles((all) => all.map((item) => item.id === saved.id ? saved : item)); setDrawer(null) }} />}
+      {drawer === 'packages' && selected && <PackagesDrawer profile={selected} packages={packages} onClose={() => setDrawer(null)} onSaved={(saved) => setProfiles((all) => all.map((item) => item.id === saved.id ? saved : item))} />}
       {drawer === 'profile' && <ProfileDrawer onClose={() => setDrawer(null)} onCreated={(profile) => { setProfiles((all) => [...all, profile]); setSelectedID(profile.id); setDrawer(null) }} />}
       {drawer === 'details' && <DetailsDrawer summary={summary} onClose={() => setDrawer(null)} />}
       {drawer === 'advanced' && selected && <AdvancedDrawer profile={selected} onClose={() => setDrawer(null)} onRotated={(profile) => setProfiles((all) => all.map((item) => item.id === profile.id ? profile : item))} />}
@@ -217,6 +222,56 @@ function GroupDrawer({ profile, group, onClose, onSaved }: { profile: Profile; g
     </div>
     {saveError && <p className="form-error" role="alert">{saveError}</p>}
   </form></Drawer>
+}
+
+function PackagesDrawer({ profile, packages, onClose, onSaved }: { profile: Profile; packages: CatalogPackage[]; onClose: () => void; onSaved: (profile: Profile) => void }) {
+  const [busyID, setBusyID] = useState('')
+  const [packageError, setPackageError] = useState('')
+
+  async function save(item: CatalogPackage, enabled: boolean, action: Action) {
+    setBusyID(item.id)
+    setPackageError('')
+    try {
+      onSaved(await api.setPackage(profile.id, item.id, enabled, action))
+    } catch (cause) {
+      setPackageError(cause instanceof Error ? cause.message : 'Não foi possível mudar o pacote')
+    } finally {
+      setBusyID('')
+    }
+  }
+
+  return <Drawer title="PACOTES PRONTOS" onClose={onClose}>
+    <div className="packages-intro">
+      <p>Ligue só o que faz sentido para esta casa. Os domínios já vêm cuidados pelo teenDNS.</p>
+      <span>{packages.length} pacotes disponíveis</span>
+    </div>
+    <div className="package-list">
+      {packages.map((item) => {
+        const group = (profile.groups || []).find((candidate) => candidate.id === item.id)
+        const enabled = Boolean(group)
+        const action = group?.action || item.suggested_action
+        const busy = busyID === item.id
+        return <article className={`package-row ${enabled ? 'is-enabled' : ''}`} key={item.id}>
+          <div className="package-copy">
+            <strong>{item.name}</strong>
+            <span>{item.domain_count} {item.domain_count === 1 ? 'domínio' : 'domínios'}</span>
+            <details><summary>por quê?</summary><p>{item.reason}</p></details>
+          </div>
+          <div className="package-controls">
+            {enabled && <select className={`package-action package-action--${action}`} value={action} onChange={(event) => void save(item, true, event.target.value as Action)} disabled={busy} aria-label={`Ação para o pacote ${item.name}`}>
+              <option value="block">Proteger</option>
+              <option value="observe">Observar</option>
+              <option value="allow">Permitir</option>
+            </select>}
+            <button className="package-toggle" disabled={busy} onClick={() => void save(item, !enabled, action)} aria-pressed={enabled}>
+              {busy ? '…' : enabled ? 'DESLIGAR' : 'LIGAR'}
+            </button>
+          </div>
+        </article>
+      })}
+    </div>
+    {packageError && <p className="form-error" role="alert">{packageError}</p>}
+  </Drawer>
 }
 
 function ProfileDrawer({ onClose, onCreated }: { onClose: () => void; onCreated: (profile: Profile) => void }) {

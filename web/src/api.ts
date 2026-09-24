@@ -32,6 +32,15 @@ export type Profile = {
   groups?: RuleGroup[]
 }
 
+export type CatalogPackage = {
+  id: string
+  name: string
+  category: string
+  reason: string
+  domain_count: number
+  suggested_action: Action
+}
+
 export type HouseRegistration = {
   house: { id: string; name: string }
   admin_token: string
@@ -116,6 +125,10 @@ export const api = {
     const result = await request<{ profiles: Profile[] }>('/api/v1/profiles')
     return result.profiles
   },
+  async packages() {
+    const result = await request<{ packages: CatalogPackage[] }>('/api/v1/catalog/packages')
+    return result.packages
+  },
   createProfile(label: string) {
     return request<Profile>('/api/v1/profiles', {
       method: 'POST',
@@ -131,6 +144,12 @@ export const api = {
         rules: profile.rules,
         groups: profile.groups || [],
       }),
+    })
+  },
+  setPackage(profileID: string, packageID: string, enabled: boolean, action: Action) {
+    return request<Profile>(`/api/v1/profiles/${profileID}/packages/${packageID}`, {
+      method: 'PUT',
+      body: JSON.stringify({ enabled, action }),
     })
   },
   rotate(profileID: string) {
