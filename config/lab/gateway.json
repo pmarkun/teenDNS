@@ -16,7 +16,7 @@
           "domain": "blocked.test",
           "include_subdomains": true,
           "action": "block",
-          "category": "gambling",
+          "category": "demo",
           "reason": "Categoria bloqueada no perfil da Ana"
         },
         {
@@ -24,26 +24,40 @@
           "action": "allow",
           "category": "education",
           "reason": "Exceção escolar mais específica"
+        }
+      ],
+      "groups": [
+        {
+          "id": "gambling-br",
+          "name": "Apostas",
+          "action": "block",
+          "category": "gambling",
+          "reason": "Serviços autorizados a oferecer apostas no Brasil",
+          "domains": [],
+          "domain_source": "catalog/v1/gambling-br-authorized.txt"
         },
         {
-          "domain": "adult.test",
-          "include_subdomains": true,
+          "id": "adult",
+          "name": "Conteúdo adulto",
           "action": "block",
           "category": "adult",
-          "reason": "Conteúdo adulto protegido pelo acordo da família"
+          "reason": "Conteúdo adulto protegido pelo acordo da família",
+          "domains": ["adult.test"]
         },
         {
-          "domain": "tracking.test",
-          "include_subdomains": true,
+          "id": "tracking",
+          "name": "Rastreamento",
           "action": "observe",
           "category": "tracking",
-          "reason": "Observar serviços que acompanham atividade entre sites"
+          "reason": "Serviços que acompanham atividade entre sites",
+          "domains": ["tracking.test"]
         },
         {
-          "domain": "youtube.com",
-          "include_subdomains": true,
+          "id": "youtube",
+          "name": "youtube.com",
           "action": "allow",
-          "reason": "Permitido pelo acordo da família"
+          "reason": "Permitido pelo acordo da família",
+          "domains": ["youtube.com"]
         }
       ]
     },
@@ -53,7 +67,8 @@
       "hostname": "p-bia.dns.teendns.test",
       "default_action": "allow",
       "version": 1,
-      "rules": []
+      "rules": [],
+      "groups": []
     }
   ]
 }

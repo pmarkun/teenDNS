@@ -10,5 +10,6 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/teendns ./cmd/teen
 FROM alpine:3.22
 RUN addgroup -S teendns && adduser -S -G teendns teendns
 COPY --from=builder /out/teendns /usr/local/bin/teendns
+COPY catalog /catalog
 USER teendns
 ENTRYPOINT ["teendns"]

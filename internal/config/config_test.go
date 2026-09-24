@@ -8,6 +8,27 @@ import (
 	"github.com/pmarkun/teendns/internal/policy"
 )
 
+func TestLoadExpandsRuleGroupDomainSource(t *testing.T) {
+	directory := t.TempDir()
+	source := filepath.Join(directory, "domains.txt")
+	if err := os.WriteFile(source, []byte("one.test\n# comment\ntwo.test\none.test\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(directory, "gateway.json")
+	contents := `{"listen":":853","upstream":"dns:53","certificate":"cert","private_key":"key","profiles":[{"id":"home","hostname":"home.test","default_action":"allow","groups":[{"id":"default","name":"Padrão","action":"block","domains":[],"domain_source":"` + source + `"}]}]}`
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	group := cfg.Profiles[0].Groups[0]
+	if len(group.Domains) != 2 || len(group.DefaultDomains) != 2 || group.Domains[1] != "two.test" {
+		t.Fatalf("unexpected expanded group: %+v", group)
+	}
+}
+
 func TestWriteAtomicRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "gateway.json")
 	want := Config{

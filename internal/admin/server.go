@@ -31,9 +31,10 @@ type Server struct {
 }
 
 type profileRequest struct {
-	Label         string        `json:"label"`
-	DefaultAction policy.Action `json:"default_action"`
-	Rules         []policy.Rule `json:"rules"`
+	Label         string             `json:"label"`
+	DefaultAction policy.Action      `json:"default_action"`
+	Rules         []policy.Rule      `json:"rules"`
+	Groups        []policy.RuleGroup `json:"groups"`
 }
 
 func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, events *gateway.EventBuffer, hostnameSuffix, token string) (*Server, error) {
@@ -101,6 +102,7 @@ func (s *Server) profilesCollection(writer http.ResponseWriter, request *http.Re
 			DefaultAction: policy.ActionAllow,
 			Version:       1,
 			Rules:         []policy.Rule{},
+			Groups:        []policy.RuleGroup{},
 		}
 		if err := s.update(func(cfg *config.Config) error {
 			cfg.Profiles = append(cfg.Profiles, profile)
@@ -166,6 +168,13 @@ func (s *Server) profileResource(writer http.ResponseWriter, request *http.Reque
 			}
 			profile.DefaultAction = input.DefaultAction
 			profile.Rules = append([]policy.Rule(nil), input.Rules...)
+			if input.Groups != nil {
+				groups, err := mergeGroups(profile.Groups, input.Groups)
+				if err != nil {
+					return err
+				}
+				profile.Groups = groups
+			}
 			profile.Version++
 			updated = *profile
 			return nil
@@ -278,6 +287,37 @@ func profileByID(profiles []policy.Profile, id string) (*policy.Profile, bool) {
 	return &profiles[index], true
 }
 
+func mergeGroups(existing, incoming []policy.RuleGroup) ([]policy.RuleGroup, error) {
+	known := make(map[string]policy.RuleGroup, len(existing))
+	for _, group := range existing {
+		known[group.ID] = group
+	}
+	result := make([]policy.RuleGroup, len(incoming))
+	for index, group := range incoming {
+		group.ID = strings.TrimSpace(group.ID)
+		group.Name = strings.TrimSpace(group.Name)
+		if group.ID == "" || group.Name == "" {
+			return nil, fmt.Errorf("group %d requires id and name", index)
+		}
+		if len(group.Domains) == 0 {
+			return nil, fmt.Errorf("group %q requires at least one domain", group.Name)
+		}
+		if stored, ok := known[group.ID]; ok {
+			group.DomainSource = stored.DomainSource
+			group.DefaultDomains = append([]string(nil), stored.DefaultDomains...)
+			if !group.Customized && len(group.DefaultDomains) > 0 {
+				group.Domains = append([]string(nil), group.DefaultDomains...)
+			}
+		} else {
+			group.DomainSource = ""
+			group.DefaultDomains = nil
+			group.Customized = true
+		}
+		result[index] = group
+	}
+	return result, nil
+}
+
 func (s *Server) authorize(next http.HandlerFunc) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		provided := strings.TrimPrefix(request.Header.Get("Authorization"), "Bearer ")
@@ -321,6 +361,12 @@ func cloneConfig(cfg config.Config) config.Config {
 		result.Profiles[index] = profile
 		result.Profiles[index].Rules = make([]policy.Rule, len(profile.Rules))
 		copy(result.Profiles[index].Rules, profile.Rules)
+		result.Profiles[index].Groups = make([]policy.RuleGroup, len(profile.Groups))
+		for groupIndex, group := range profile.Groups {
+			result.Profiles[index].Groups[groupIndex] = group
+			result.Profiles[index].Groups[groupIndex].Domains = append([]string(nil), group.Domains...)
+			result.Profiles[index].Groups[groupIndex].DefaultDomains = append([]string(nil), group.DefaultDomains...)
+		}
 	}
 	return result
 }

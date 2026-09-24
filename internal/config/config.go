@@ -1,9 +1,11 @@
 package config
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/pmarkun/teendns/internal/policy"
 )
@@ -36,8 +38,54 @@ func Load(path string) (Config, error) {
 	if cfg.MaxTTL == 0 {
 		cfg.MaxTTL = 300
 	}
+	for profileIndex := range cfg.Profiles {
+		for groupIndex := range cfg.Profiles[profileIndex].Groups {
+			group := &cfg.Profiles[profileIndex].Groups[groupIndex]
+			if group.DomainSource == "" {
+				if group.DefaultDomains == nil {
+					group.DefaultDomains = append([]string(nil), group.Domains...)
+				}
+				continue
+			}
+			defaults, err := loadDomains(group.DomainSource)
+			if err != nil {
+				return Config{}, fmt.Errorf("profile %q group %q source: %w", cfg.Profiles[profileIndex].ID, group.ID, err)
+			}
+			group.DefaultDomains = defaults
+			if !group.Customized {
+				group.Domains = append([]string(nil), defaults...)
+			}
+		}
+	}
 	if _, err := policy.NewStore(cfg.Profiles); err != nil {
 		return Config{}, fmt.Errorf("profiles: %w", err)
 	}
 	return cfg, nil
+}
+
+func loadDomains(path string) ([]string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open %s: %w", path, err)
+	}
+	defer file.Close()
+
+	domains := make([]string, 0)
+	seen := make(map[string]struct{})
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.ToLower(strings.TrimSpace(scanner.Text()))
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if _, exists := seen[line]; exists {
+			continue
+		}
+		seen[line] = struct{}{}
+		domains = append(domains, line)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	return domains, nil
 }

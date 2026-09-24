@@ -98,6 +98,32 @@ func TestAdminRequiresBearerToken(t *testing.T) {
 	}
 }
 
+func TestMergeGroupsRestoresServerDefaults(t *testing.T) {
+	existing := []policy.RuleGroup{{
+		ID:             "gambling",
+		Name:           "Apostas",
+		Action:         policy.ActionBlock,
+		Domains:        []string{"custom.test"},
+		DefaultDomains: []string{"one.test", "two.test"},
+		DomainSource:   "catalog.txt",
+		Customized:     true,
+	}}
+	incoming := []policy.RuleGroup{{
+		ID:         "gambling",
+		Name:       "Apostas",
+		Action:     policy.ActionBlock,
+		Domains:    []string{"ignored.test"},
+		Customized: false,
+	}}
+	groups, err := mergeGroups(existing, incoming)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(groups[0].Domains) != 2 || groups[0].Domains[0] != "one.test" || groups[0].DomainSource != "catalog.txt" {
+		t.Fatalf("defaults were not restored: %+v", groups[0])
+	}
+}
+
 func testConfig() config.Config {
 	return config.Config{
 		Listen:      ":853",

@@ -23,14 +23,27 @@ type Rule struct {
 	Reason            string `json:"reason,omitempty"`
 }
 
+type RuleGroup struct {
+	ID             string   `json:"id"`
+	Name           string   `json:"name"`
+	Action         Action   `json:"action"`
+	Category       string   `json:"category,omitempty"`
+	Reason         string   `json:"reason,omitempty"`
+	Domains        []string `json:"domains"`
+	DefaultDomains []string `json:"default_domains,omitempty"`
+	DomainSource   string   `json:"domain_source,omitempty"`
+	Customized     bool     `json:"customized,omitempty"`
+}
+
 type Profile struct {
-	ID            string `json:"id"`
-	Label         string `json:"label,omitempty"`
-	Hostname      string `json:"hostname"`
-	Disabled      bool   `json:"disabled,omitempty"`
-	DefaultAction Action `json:"default_action"`
-	Version       int64  `json:"version"`
-	Rules         []Rule `json:"rules"`
+	ID            string      `json:"id"`
+	Label         string      `json:"label,omitempty"`
+	Hostname      string      `json:"hostname"`
+	Disabled      bool        `json:"disabled,omitempty"`
+	DefaultAction Action      `json:"default_action"`
+	Version       int64       `json:"version"`
+	Rules         []Rule      `json:"rules"`
+	Groups        []RuleGroup `json:"groups,omitempty"`
 }
 
 type Decision struct {
@@ -104,6 +117,32 @@ func NewStore(profiles []Profile) (*Store, error) {
 				return nil, fmt.Errorf("profile %q rule %d has invalid action %q", profile.ID, index, rule.Action)
 			}
 		}
+		groupIDs := make(map[string]struct{}, len(profile.Groups))
+		for index := range profile.Groups {
+			group := &profile.Groups[index]
+			if group.ID == "" || group.Name == "" {
+				return nil, fmt.Errorf("profile %q group %d requires id and name", profile.ID, index)
+			}
+			if _, exists := groupIDs[group.ID]; exists {
+				return nil, fmt.Errorf("profile %q has duplicate group id %q", profile.ID, group.ID)
+			}
+			groupIDs[group.ID] = struct{}{}
+			if !validAction(group.Action) {
+				return nil, fmt.Errorf("profile %q group %q has invalid action %q", profile.ID, group.ID, group.Action)
+			}
+			seenDomains := make(map[string]struct{}, len(group.Domains))
+			for domainIndex, domain := range group.Domains {
+				normalized, err := normalizeName(domain)
+				if err != nil {
+					return nil, fmt.Errorf("profile %q group %q domain %d: %w", profile.ID, group.ID, domainIndex, err)
+				}
+				if _, exists := seenDomains[normalized]; exists {
+					return nil, fmt.Errorf("profile %q group %q repeats domain %q", profile.ID, group.ID, normalized)
+				}
+				seenDomains[normalized] = struct{}{}
+				group.Domains[domainIndex] = normalized
+			}
+		}
 		store.profiles[normalizedHostname] = profile
 	}
 
@@ -145,6 +184,19 @@ func Decide(profile Profile, queryName string) (Decision, error) {
 		decision.Category = rule.Category
 		decision.Reason = rule.Reason
 		decision.MatchedDomain = rule.Domain
+	}
+	for _, group := range profile.Groups {
+		for _, domain := range group.Domains {
+			matches := name == domain || strings.HasSuffix(name, "."+domain)
+			if !matches || len(domain) <= bestMatchLength {
+				continue
+			}
+			bestMatchLength = len(domain)
+			decision.Action = group.Action
+			decision.Category = group.Category
+			decision.Reason = group.Reason
+			decision.MatchedDomain = domain
+		}
 	}
 
 	return decision, nil
