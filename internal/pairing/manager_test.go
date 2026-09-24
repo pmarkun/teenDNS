@@ -28,6 +28,31 @@ func TestChallengePairsDNSProfileWithoutExposingChallengeID(t *testing.T) {
 	}
 }
 
+func TestOutcomeReportsObservingProfileWithoutSessionToken(t *testing.T) {
+	manager := NewManager("pair.teendns.test", time.Minute, time.Hour)
+	challenge, _ := manager.Create()
+
+	profileID, ok := manager.Outcome(challenge.ID)
+	if !ok {
+		t.Fatal("pending challenge should be known to Outcome")
+	}
+	if profileID != "" {
+		t.Fatalf("unobserved challenge must not report a profile, got %q", profileID)
+	}
+
+	if !manager.Observe("home", challenge.DNSName) {
+		t.Fatal("active DNS challenge was not observed")
+	}
+	profileID, ok = manager.Outcome(challenge.ID)
+	if !ok || profileID != "home" {
+		t.Fatalf("unexpected outcome: profile %q, ok %v", profileID, ok)
+	}
+
+	if _, ok := manager.Outcome("missing"); ok {
+		t.Fatal("unknown challenge reported as available")
+	}
+}
+
 func TestChallengeRejectsUnrelatedAndNestedNames(t *testing.T) {
 	manager := NewManager("pair.teendns.test", time.Minute, time.Hour)
 	challenge, _ := manager.Create()

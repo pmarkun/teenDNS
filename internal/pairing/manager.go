@@ -133,6 +133,25 @@ func (m *Manager) Status(id string) (Status, bool) {
 	return Status{Paired: true, SessionToken: record.sessionToken, ExpiresAt: record.sessionExpiry}, true
 }
 
+// Outcome reports the profile that resolved a challenge's DNS name, once it
+// has been observed. The second return value is false when the challenge is
+// unknown or expired. Unlike Status, it never returns a session token, so it
+// is safe for the responsible side of the flow (the panel).
+func (m *Manager) Outcome(id string) (string, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.cleanup()
+	record, ok := m.challenges[id]
+	if !ok {
+		return "", false
+	}
+	if record.profileID == "" {
+		return "", true
+	}
+	return record.profileID, true
+}
+
 func (m *Manager) Profile(sessionToken string) (string, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
