@@ -14,8 +14,6 @@
       "themes": {
         "adult_content": "block",
         "gambling": "block",
-        "security_threats": "block",
-        "tracking": "observe",
         "social_platforms": "block",
         "social_video": "block",
         "messaging_and_communities": "observe",
@@ -30,8 +28,6 @@
       "themes": {
         "adult_content": "block",
         "gambling": "block",
-        "security_threats": "block",
-        "tracking": "observe",
         "social_platforms": "observe",
         "social_video": "observe",
         "messaging_and_communities": "observe",
@@ -46,8 +42,6 @@
       "themes": {
         "adult_content": "block",
         "gambling": "block",
-        "security_threats": "block",
-        "tracking": "observe",
         "social_platforms": "allow",
         "social_video": "allow",
         "messaging_and_communities": "allow",

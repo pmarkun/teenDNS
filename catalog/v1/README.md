@@ -11,9 +11,7 @@ fonte comunitária seja apresentada como decisão de um órgão público.
 | --- | --- | --- | --- |
 | `gambling-br-authorized.txt` | SPA/MF | `block` | Domínios autorizados a oferecer apostas no Brasil. A categoria é aposta; a presença na lista não significa ilegalidade. |
 | `adult-content-regulators.txt` | Ofcom e Comissão Europeia | `block` | Serviços identificados por reguladores como serviços adultos ou plataformas pornográficas. |
-| `social-platforms.txt` | Registro Category 1 da Ofcom | `observe` | Portas de entrada canônicas de grandes serviços sociais, de mensageria, vídeo, fórum e jogo social. |
-| `tracking-observe.txt` | The Block List Project | `observe` | Domínios técnicos associados a rastreamento ou analytics. Não devem ser bloqueados por padrão na v1. |
-| `security-threats.txt` | The Block List Project | `block` | Domínios associados a phishing ou ransomware; é proteção técnica, não controle de conteúdo. |
+| `security-threats.txt` | The Block List Project | futuro matcher global | Domínios associados a phishing ou ransomware; ainda não são copiados para políticas por perfil. |
 | `services/*.txt` | Documentação oficial dos serviços | `observe` | Pools pequenos para controlar um serviço específico no navegador e no app sem incluir infraestrutura compartilhada. |
 
 Os metadados ficam em:
@@ -64,14 +62,14 @@ da pessoa:
 - **Acompanhado:** bloqueia por padrão plataformas sociais e vídeo social;
   mensageria, comunidades e jogos sociais ficam em observação para preservar
   contato, escola e brincadeira combinada.
-- **Explorando:** mantém serviços mistos em observação e protege contra adulto,
-  apostas e ameaças técnicas.
+- **Explorando:** mantém serviços mistos em observação e protege contra adulto
+  e apostas.
 - **Autonomia guiada:** permite serviços mistos e mantém as proteções essenciais;
   a conversa parte do uso observado e das escolhas da própria casa.
 
-Em todos eles, adulto, apostas, phishing e ransomware começam bloqueados;
-rastreadores começam em observação para evitar quebra silenciosa de sites. Uma
-família pode alterar qualquer ação ou serviço sem trocar de preset.
+Em todos eles, adulto e apostas começam bloqueados. Phishing e ransomware estão
+catalogados para uma futura camada técnica global, ainda não aplicada aos
+perfis. Uma família pode alterar qualquer ação ou serviço sem trocar de preset.
 
 `unknown` não possui arquivo: é o estado calculado quando não há correspondência
 no catálogo.
@@ -80,8 +78,6 @@ no catálogo.
 
 - As listas regulatórias são pequenas e auditáveis. Elas formam o núcleo de
   alta confiança.
-- A lista de rastreamento é ampla e comunitária. Ela serve inicialmente para
-  observação e para testar quebra de sites antes de qualquer bloqueio.
 - A correspondência inicial deve ser exata. Incluir subdomínios é uma decisão
   separada da política, porque bloquear uma zona inteira aumenta muito o risco
   de falso positivo.

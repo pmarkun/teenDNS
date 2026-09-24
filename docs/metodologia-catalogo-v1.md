@@ -31,7 +31,7 @@ o usuário.
 | --- | --- | --- |
 | Registro oficial | CSV da Secretaria de Prêmios e Apostas | bloqueio de apostas |
 | Identificação regulatória | Ofcom e Comissão Europeia | bloqueio de serviços adultos dedicados |
-| Lista comunitária licenciada | The Block List Project, MIT | observação de tracking e bloqueio de phishing/ransomware |
+| Lista comunitária licenciada | The Block List Project, MIT | catálogo técnico de phishing/ransomware para uma futura camada global |
 | Pool de serviço | documentação do próprio provedor + revisão manual | controle seletivo; observação por padrão |
 
 Os nomes de domínio nos pools são fatos técnicos compilados manualmente. Não foi
@@ -71,8 +71,6 @@ Os três presets combinam **temas**, não uma lista de sites “bons” e “rui
 | --- | --- | --- | --- |
 | Conteúdo adulto dedicado | bloquear | bloquear | bloquear |
 | Apostas | bloquear | bloquear | bloquear |
-| Phishing e ransomware | bloquear | bloquear | bloquear |
-| Tracking | observar | observar | observar |
 | Redes sociais | bloquear | observar | permitir |
 | Vídeo social | bloquear | observar | permitir |
 | Mensageria e comunidades | observar | observar | permitir |
@@ -82,6 +80,10 @@ Os três presets combinam **temas**, não uma lista de sites “bons” e “rui
 serviço. Não inclui WhatsApp, Discord, Telegram ou Roblox, que pertencem a temas
 separados justamente para que contato e jogo não desapareçam como efeito
 colateral.
+
+Phishing e ransomware não fazem parte dos pacotes por perfil. A lista técnica
+fica versionada como insumo para um matcher global futuro, evitando duplicar
+centenas de milhares de domínios em cada casa.
 
 ## Protocolo para promover domínios
 

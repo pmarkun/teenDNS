@@ -24,9 +24,6 @@ SPA_URL = (
     "secretaria-de-premios-e-apostas/transparencia-ativa-processos-de-"
     "autorizacao-de-apostas-de-quota-fixa/planilha-de-autorizacoes-1.csv"
 )
-TRACKING_URL = (
-    "https://blocklistproject.github.io/Lists/alt-version/tracking-nl.txt"
-)
 PHISHING_URL = (
     "https://blocklistproject.github.io/Lists/alt-version/phishing-nl.txt"
 )
@@ -37,10 +34,6 @@ OFCOM_URL = (
     "https://www.ofcom.org.uk/online-safety/protecting-children/"
     "enforcement-programme-to-protect-children-from-encountering-"
     "pornographic-content-through-the-use-of-age-assurance"
-)
-OFCOM_CATEGORY_URL = (
-    "https://www.ofcom.org.uk/online-safety/illegal-and-harmful-content/"
-    "register-of-categorised-services-and-list-emerging-category-1-services"
 )
 EU_ADULT_URL = (
     "https://digital-strategy.ec.europa.eu/en/news/commission-designates-"
@@ -149,28 +142,6 @@ yourlust.com
 
 # The European Commission designated these services as pornographic VLOPs.
 EU_ADULT_DOMAINS = ["pornhub.com", "stripchat.com", "xvideos.com", "xnxx.com"]
-
-# Current Category 1 user-to-user services in Ofcom's public register. Domains
-# are the canonical public entry points; auxiliary/CDN domains are deliberately
-# not inferred in v1.
-SOCIAL_DOMAINS = """
-facebook.com
-instagram.com
-pinterest.com
-quora.com
-reddit.com
-roblox.com
-snapchat.com
-tiktok.com
-whatsapp.com
-x.com
-youtube.com
-""".split()
-
-# Legacy canonical hostname retained because the European Commission's first
-# DSA designation named the service Twitter and the hostname still resolves.
-SOCIAL_LEGACY_DOMAINS = ["twitter.com"]
-
 
 # Service pools are intentionally small sets of provider-specific DNS suffixes.
 # A pool is useful for a family choice such as "pause TikTok"; it is not a
@@ -398,8 +369,6 @@ PRESETS = {
             "themes": {
                 "adult_content": "block",
                 "gambling": "block",
-                "security_threats": "block",
-                "tracking": "observe",
                 "social_platforms": "block",
                 "social_video": "block",
                 "messaging_and_communities": "observe",
@@ -414,8 +383,6 @@ PRESETS = {
             "themes": {
                 "adult_content": "block",
                 "gambling": "block",
-                "security_threats": "block",
-                "tracking": "observe",
                 "social_platforms": "observe",
                 "social_video": "observe",
                 "messaging_and_communities": "observe",
@@ -430,8 +397,6 @@ PRESETS = {
             "themes": {
                 "adult_content": "block",
                 "gambling": "block",
-                "security_threats": "block",
-                "tracking": "observe",
                 "social_platforms": "allow",
                 "social_video": "allow",
                 "messaging_and_communities": "allow",
@@ -602,10 +567,8 @@ def main() -> None:
     fetched_at = datetime.now(UTC).replace(microsecond=0).isoformat()
     validate_service_pools()
     spa_payload = fetch(SPA_URL)
-    tracking_payload = fetch(TRACKING_URL)
     phishing_payload = fetch(PHISHING_URL)
     ransomware_payload = fetch(RANSOMWARE_URL)
-    tracking_domains, tracking_rejected = parse_domain_list(tracking_payload)
     phishing_domains, phishing_rejected = parse_domain_list(phishing_payload)
     ransomware_domains, ransomware_rejected = parse_domain_list(
         ransomware_payload
@@ -616,10 +579,6 @@ def main() -> None:
             OFCOM_ADULT_DOMAINS + EU_ADULT_DOMAINS
         ),
         "gambling-br-authorized.txt": parse_spa_domains(spa_payload),
-        "social-platforms.txt": normalized(
-            SOCIAL_DOMAINS + SOCIAL_LEGACY_DOMAINS
-        ),
-        "tracking-observe.txt": tracking_domains,
         "security-threats.txt": sorted(
             set(phishing_domains) | set(ransomware_domains)
         ),
@@ -674,16 +633,6 @@ def main() -> None:
                 "default_action": "block",
                 "confidence": "official_register",
             },
-            "social-platforms.txt": {
-                "category": "social_platform",
-                "default_action": "observe",
-                "confidence": "regulator_identified",
-            },
-            "tracking-observe.txt": {
-                "category": "tracking",
-                "default_action": "observe",
-                "confidence": "community_curated",
-            },
             "security-threats.txt": {
                 "category": "security_threats",
                 "default_action": "block",
@@ -726,23 +675,6 @@ def main() -> None:
                 "output": "adult-content-regulators.txt",
             },
             {
-                "id": "ofcom-category-1",
-                "publisher": "Ofcom",
-                "url": OFCOM_CATEGORY_URL,
-                "retrieved_at": fetched_at,
-                "extraction": "manual canonical-domain mapping",
-                "output": "social-platforms.txt",
-            },
-            {
-                "id": "block-list-project-tracking",
-                "publisher": "The Block List Project",
-                "url": TRACKING_URL,
-                "retrieved_at": fetched_at,
-                "sha256": sha256(tracking_payload),
-                "license": "Unlicense; downloaded snapshot header states MIT",
-                "output": "tracking-observe.txt",
-            },
-            {
                 "id": "block-list-project-phishing",
                 "publisher": "The Block List Project",
                 "url": PHISHING_URL,
@@ -777,11 +709,6 @@ def main() -> None:
         ],
         "counts": {name: len(domains) for name, domains in lists.items()},
         "rejected": {
-            "tracking-observe.txt": {
-                "count": len(tracking_rejected),
-                "entries": tracking_rejected,
-                "reason": "not a valid hostname under the teenDNS v1 grammar",
-            },
             "security-threats.txt": {
                 "count": len(phishing_rejected) + len(ransomware_rejected),
                 "entries": sorted(
