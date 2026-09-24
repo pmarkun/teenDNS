@@ -47,6 +47,14 @@ export type HouseRegistration = {
   profile: Profile
 }
 
+export type Invitation = {
+  email: string
+  expires_at: string
+  code: string
+  link: string
+  email_sent: boolean
+}
+
 export type EventSummary = {
   profile_id: string
   total: number
@@ -110,6 +118,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  createInvitation(email: string) {
+    return request<Invitation>('/api/v1/invitations', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    })
+  },
   registerHouse(invitationCode: string, houseName: string, profileName: string, preset: string) {
     return request<HouseRegistration>('/api/v1/houses', {
       method: 'POST',

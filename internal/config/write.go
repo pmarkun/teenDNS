@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 )
 
-func WriteAtomic(path string, cfg Config, mode os.FileMode) error {
-	contents, err := json.MarshalIndent(cfg, "", "  ")
+func WriteAtomic[T any](path string, value T, mode os.FileMode) error {
+	contents, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode config: %w", err)
 	}

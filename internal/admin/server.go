@@ -10,8 +10,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
+	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -22,6 +25,7 @@ import (
 
 	"github.com/pmarkun/teendns/internal/config"
 	"github.com/pmarkun/teendns/internal/gateway"
+	"github.com/pmarkun/teendns/internal/mail"
 	"github.com/pmarkun/teendns/internal/pairing"
 	"github.com/pmarkun/teendns/internal/policy"
 )
@@ -35,8 +39,8 @@ type Server struct {
 	pairings       *pairing.Manager
 	hostnameSuffix string
 	token          string
-	invitationKeys []string
 	catalogDir     string
+	mailer         mail.Sender
 }
 
 type accessScope struct {
@@ -71,6 +75,20 @@ type houseResponse struct {
 	Name string `json:"name"`
 }
 
+type invitationRequest struct {
+	Email string `json:"email"`
+}
+
+type invitationResponse struct {
+	Email     string    `json:"email"`
+	ExpiresAt time.Time `json:"expires_at"`
+	Code      string    `json:"code"`
+	Link      string    `json:"link"`
+	EmailSent bool      `json:"email_sent"`
+}
+
+const invitationValidity = 7 * 24 * time.Hour
+
 type catalogPackageResponse struct {
 	ID              string        `json:"id"`
 	Name            string        `json:"name"`
@@ -95,12 +113,15 @@ type youthProfile struct {
 	Rules []youthRule `json:"rules"`
 }
 
-func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, events *gateway.EventBuffer, pairings *pairing.Manager, hostnameSuffix, token string) (*Server, error) {
+func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, events *gateway.EventBuffer, pairings *pairing.Manager, hostnameSuffix, token string, mailer mail.Sender) (*Server, error) {
 	if strings.TrimSpace(token) == "" {
 		return nil, errors.New("admin token is required")
 	}
 	if pairings == nil {
 		return nil, errors.New("pairing manager is required")
+	}
+	if mailer == nil {
+		return nil, errors.New("mailer is required")
 	}
 	if hostnameSuffix == "" {
 		hostnameSuffix = "dns.teendns.test"
@@ -113,8 +134,8 @@ func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, e
 		pairings:       pairings,
 		hostnameSuffix: strings.TrimSuffix(strings.ToLower(hostnameSuffix), "."),
 		token:          token,
-		invitationKeys: splitInvitationKeys(os.Getenv("TEENDNS_INVITATION_CODES")),
 		catalogDir:     environmentOrDefault("TEENDNS_CATALOG_DIR", "catalog/v1"),
+		mailer:         mailer,
 	}, nil
 }
 
@@ -126,6 +147,14 @@ func (s *Server) Reload(cfg config.Config) {
 	s.config = cloneConfig(cfg)
 }
 
+// Snapshot returns a copy of the current configuration for read-only
+// consumers outside the admin API, such as the digest scheduler.
+func (s *Server) Snapshot() config.Config {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return cloneConfig(s.config)
+}
+
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(writer http.ResponseWriter, _ *http.Request) {
@@ -135,6 +164,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/pairing/challenges/{id}", s.pairingChallengeStatus)
 	mux.HandleFunc("GET /api/v1/youth/profile", s.youthProfile)
 	mux.HandleFunc("POST /api/v1/houses", s.registerHouse)
+	mux.HandleFunc("POST /api/v1/invitations", s.authorize(s.createInvitation))
 	mux.HandleFunc("GET /api/v1/catalog/packages", s.authorize(s.catalogPackages))
 	mux.HandleFunc("/api/v1/profiles", s.authorize(s.profilesCollection))
 	mux.HandleFunc("/api/v1/profiles/", s.authorize(s.profileResource))
@@ -174,8 +204,11 @@ func (s *Server) registerHouse(writer http.ResponseWriter, request *http.Request
 		return
 	}
 	invitationKey := tokenHash(strings.TrimSpace(input.InvitationCode))
-	if !containsConstantTime(s.invitationKeys, invitationKey) {
-		writeError(writer, http.StatusForbidden, errors.New("convite inválido ou já usado"))
+	s.mu.RLock()
+	invitation, invitationValid := findValidInvitation(s.config.Invitations, invitationKey, time.Now())
+	s.mu.RUnlock()
+	if !invitationValid {
+		writeError(writer, http.StatusForbidden, errors.New("convite inválido, expirado ou já usado"))
 		return
 	}
 	houseToken, err := randomToken()
@@ -193,7 +226,7 @@ func (s *Server) registerHouse(writer http.ResponseWriter, request *http.Request
 		writeError(writer, http.StatusInternalServerError, err)
 		return
 	}
-	house := config.House{ID: houseIDToken[:12], Name: input.HouseName, AdminTokenHash: tokenHash(houseToken)}
+	house := config.House{ID: houseIDToken[:12], Name: input.HouseName, AdminTokenHash: tokenHash(houseToken), Email: invitation.Email}
 	groups, err := presetGroups(input.Preset, s.catalogDir)
 	if err != nil {
 		writeError(writer, http.StatusBadRequest, err)
@@ -210,10 +243,13 @@ func (s *Server) registerHouse(writer http.ResponseWriter, request *http.Request
 		Groups:        groups,
 	}
 	err = s.update(func(cfg *config.Config) error {
-		if slices.Contains(cfg.UsedInvitationKeys, invitationKey) {
-			return errors.New("convite inválido ou já usado")
+		index, ok := findValidInvitationIndex(cfg.Invitations, invitationKey, time.Now())
+		if !ok {
+			return errors.New("convite inválido, expirado ou já usado")
 		}
-		cfg.UsedInvitationKeys = append(cfg.UsedInvitationKeys, invitationKey)
+		now := time.Now()
+		cfg.Invitations[index].UsedAt = &now
+		cfg.Invitations[index].Email = ""
 		cfg.Houses = append(cfg.Houses, house)
 		cfg.Profiles = append(cfg.Profiles, profile)
 		return nil
@@ -226,6 +262,85 @@ func (s *Server) registerHouse(writer http.ResponseWriter, request *http.Request
 	writeJSON(writer, http.StatusCreated, registrationResponse{
 		House: houseResponse{ID: house.ID, Name: house.Name}, AdminToken: houseToken, Profile: profile,
 	})
+}
+
+// createInvitation lets the operator generate a single-use, expiring
+// invitation for a specific family and email it to them. Only the global
+// operator token may call this — a house's own admin token cannot invite
+// other houses.
+func (s *Server) createInvitation(writer http.ResponseWriter, request *http.Request) {
+	if !requestScope(request).operator {
+		writeError(writer, http.StatusForbidden, errors.New("somente o operador pode gerar convites"))
+		return
+	}
+	var input invitationRequest
+	if err := decodeJSON(request, &input); err != nil {
+		writeError(writer, http.StatusBadRequest, err)
+		return
+	}
+	input.Email = strings.TrimSpace(input.Email)
+	if !looksLikeEmail(input.Email) {
+		writeError(writer, http.StatusBadRequest, errors.New("e-mail inválido"))
+		return
+	}
+	code, err := randomToken()
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, err)
+		return
+	}
+	now := time.Now()
+	invitation := config.Invitation{
+		CodeHash:  tokenHash(code),
+		Email:     input.Email,
+		CreatedAt: now,
+		ExpiresAt: now.Add(invitationValidity),
+	}
+	if err := s.update(func(cfg *config.Config) error {
+		cfg.Invitations = append(cfg.Invitations, invitation)
+		return nil
+	}); err != nil {
+		writeError(writer, http.StatusInternalServerError, err)
+		return
+	}
+
+	link := s.invitationLink(request, code)
+	sendErr := s.mailer.Send(input.Email, "Convite para o teenDNS", invitationEmailBody(link))
+	if sendErr != nil {
+		log.Printf("invitation: failed to email %s: %v", input.Email, sendErr)
+	}
+
+	writer.Header().Set("Cache-Control", "no-store")
+	writeJSON(writer, http.StatusCreated, invitationResponse{
+		Email:     input.Email,
+		ExpiresAt: invitation.ExpiresAt,
+		Code:      code,
+		Link:      link,
+		EmailSent: sendErr == nil,
+	})
+}
+
+func (s *Server) invitationLink(request *http.Request, code string) string {
+	base := strings.TrimSuffix(environmentOrDefault("TEENDNS_PUBLIC_URL", ""), "/")
+	if base == "" {
+		base = "https://" + request.Host
+	}
+	return base + "/comecar?convite=" + url.QueryEscape(code)
+}
+
+func invitationEmailBody(link string) string {
+	return fmt.Sprintf(
+		"<p>Você foi convidado a criar uma casa no teenDNS.</p><p><a href=\"%[1]s\">%[1]s</a></p><p>Este link é de uso único e expira em 7 dias.</p>",
+		html.EscapeString(link),
+	)
+}
+
+func looksLikeEmail(value string) bool {
+	at := strings.IndexByte(value, '@')
+	if at <= 0 || at == len(value)-1 {
+		return false
+	}
+	domain := value[at+1:]
+	return strings.Contains(domain, ".") && !strings.ContainsAny(value, " \t\n")
 }
 
 func (s *Server) createPairingChallenge(writer http.ResponseWriter, _ *http.Request) {
@@ -622,22 +737,27 @@ func filterProfiles(profiles []policy.Profile, scope accessScope) []policy.Profi
 	return result
 }
 
-func splitInvitationKeys(value string) []string {
-	keys := []string{}
-	for _, code := range strings.Split(value, ",") {
-		if code = strings.TrimSpace(code); code != "" {
-			keys = append(keys, tokenHash(code))
-		}
+// findValidInvitation returns the first invitation whose hash matches
+// wanted, is unused and has not expired. Comparison is constant-time so
+// invitation codes cannot be recovered by timing.
+func findValidInvitation(invitations []config.Invitation, wanted string, now time.Time) (config.Invitation, bool) {
+	index, ok := findValidInvitationIndex(invitations, wanted, now)
+	if !ok {
+		return config.Invitation{}, false
 	}
-	return keys
+	return invitations[index], true
 }
 
-func containsConstantTime(values []string, wanted string) bool {
-	found := 0
-	for _, value := range values {
-		found |= subtle.ConstantTimeCompare([]byte(value), []byte(wanted))
+func findValidInvitationIndex(invitations []config.Invitation, wanted string, now time.Time) (int, bool) {
+	for index, invitation := range invitations {
+		if invitation.UsedAt != nil || now.After(invitation.ExpiresAt) {
+			continue
+		}
+		if constantTimeEqual(invitation.CodeHash, wanted) {
+			return index, true
+		}
 	}
-	return found == 1
+	return 0, false
 }
 
 func constantTimeEqual(left, right string) bool {
@@ -824,7 +944,7 @@ func randomToken() (string, error) {
 func cloneConfig(cfg config.Config) config.Config {
 	result := cfg
 	result.Houses = append([]config.House{}, cfg.Houses...)
-	result.UsedInvitationKeys = append([]string{}, cfg.UsedInvitationKeys...)
+	result.Invitations = append([]config.Invitation{}, cfg.Invitations...)
 	result.Profiles = make([]policy.Profile, len(cfg.Profiles))
 	for index, profile := range cfg.Profiles {
 		result.Profiles[index] = profile

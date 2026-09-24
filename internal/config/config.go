@@ -6,25 +6,39 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/pmarkun/teendns/internal/policy"
 )
 
 type Config struct {
-	Listen             string           `json:"listen"`
-	Upstream           string           `json:"upstream"`
-	Certificate        string           `json:"certificate"`
-	PrivateKey         string           `json:"private_key"`
-	MaxTTL             uint32           `json:"max_ttl"`
-	Houses             []House          `json:"houses,omitempty"`
-	UsedInvitationKeys []string         `json:"used_invitation_keys,omitempty"`
-	Profiles           []policy.Profile `json:"profiles"`
+	Listen      string           `json:"listen"`
+	Upstream    string           `json:"upstream"`
+	Certificate string           `json:"certificate"`
+	PrivateKey  string           `json:"private_key"`
+	MaxTTL      uint32           `json:"max_ttl"`
+	Houses      []House          `json:"houses,omitempty"`
+	Invitations []Invitation     `json:"invitations,omitempty"`
+	Profiles    []policy.Profile `json:"profiles"`
 }
 
 type House struct {
 	ID             string `json:"id"`
 	Name           string `json:"name"`
 	AdminTokenHash string `json:"admin_token_hash"`
+	Email          string `json:"email,omitempty"`
+}
+
+// Invitation is a single-use, expiring code an operator generates for a
+// specific family. Email is redacted (set to "") once the invitation is
+// consumed by registerHouse, since it survives from then on only as the
+// House's own Email field.
+type Invitation struct {
+	CodeHash  string     `json:"code_hash"`
+	Email     string     `json:"email,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	ExpiresAt time.Time  `json:"expires_at"`
+	UsedAt    *time.Time `json:"used_at,omitempty"`
 }
 
 func Load(path string) (Config, error) {

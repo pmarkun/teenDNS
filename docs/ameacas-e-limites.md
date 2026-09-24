@@ -22,6 +22,9 @@ Portanto, no MVP:
 - identifica o perfil compartilhado, não quem está segurando o aparelho;
 - pode ser regenerado sem recriar o perfil;
 - eventos devem ser agregados e ter retenção curta;
+- o digest semanal por e-mail é uma exceção deliberada e documentada a essa
+  regra — ver "Logs DNS são sensíveis" abaixo — e não muda o que o pareamento
+  ou o painel administrativo expõem;
 - o painel usa autenticação separada;
 - não se afirma que toda consulta atribuída ao perfil veio do aparelho esperado.
 
@@ -87,6 +90,35 @@ Antes de um piloto com famílias, ainda será necessário definir:
 - política para incidentes;
 - transparência compreensível para crianças e responsáveis;
 - base jurídica e responsabilidades relativas a dados de crianças e adolescentes.
+
+### Retenção implementada para o digest semanal
+
+O digest por e-mail (`internal/digest`) responde parcialmente aos pontos
+acima, com estas escolhas deliberadas:
+
+- só domínios sob ação `Observar` são retidos; nada sob `Bloquear` ou
+  `Permitir` entra no acumulado;
+- a chave é o domínio do catálogo que casou a política (`MatchedDomain`), não
+  o nome de consulta bruto — evita reter subdomínios técnicos de CDN/rastreio
+  e limita o volume de dados ao tamanho do catálogo, não ao tráfego real;
+- a granularidade temporal é o período do dia (manhã, tarde ou noite, fuso
+  fixo `America/Sao_Paulo`), nunca o horário exato nem a ordem das consultas —
+  não é possível reconstruir uma sessão de navegação a partir do digest;
+- o acumulado é apagado automaticamente a cada envio bem-sucedido
+  (`Store.CompleteDigest`); nada persiste além do período corrente entre dois
+  envios;
+- o único destino dos dados é o e-mail enviado à própria casa via Resend; o
+  painel administrativo e a visão jovem pareada continuam sem acesso a esse
+  detalhe por domínio — só o agregado por categoria que já existia
+  (`EventBuffer`) permanece visível ali;
+- o e-mail do responsável usado para o envio vem do convite que criou a casa e
+  é a única informação pessoal nova retida por casa; o e-mail do convite em si
+  é apagado do registro assim que a casa é criada.
+
+Seguem em aberto: criptografia em repouso do arquivo de observações,
+controle de acesso e auditoria formal sobre o próprio envio, política de
+incidente e a base jurídica/LGPD para reter esse dado durante um piloto real
+com famílias.
 
 ## Disponibilidade
 
