@@ -40,8 +40,12 @@ do componente. Preserve mudanças existentes no worktree.
 
 - Faça commits convencionais, pequenos e atômicos; não misture código,
   catálogo, limpeza e documentação sem necessidade.
-- Não faça push direto para branches protegidas nem merge sem pedido explícito.
-- Publique staging apenas quando solicitado. Preserve
+- `main` é integração; `production` é a única fonte de deploy e aceita mudanças
+  somente por PR. Não faça push direto nem force-push nessas branches.
+- Uma release segue `feature -> main -> production -> deploy do SHA exato`.
+  Ao terminar, `/opt/teendns/DEPLOYED_REVISION` deve coincidir com
+  `origin/production`.
+- Faça merge ou publique staging apenas quando solicitado. Preserve
   `/opt/teendns/runtime/gateway.json`; nunca use `docker compose down`, prune ou
   alterações globais na VPS.
 - Após deploy, valide `/healthz`, containers, uma resolução permitida, um
