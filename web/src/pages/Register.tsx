@@ -9,7 +9,7 @@ const presets = [
 ]
 
 export function Register() {
-  const [invitationCode, setInvitationCode] = useState('')
+  const [invitationCode, setInvitationCode] = useState(() => new URLSearchParams(window.location.search).get('convite') || '')
   const [houseName, setHouseName] = useState('')
   const [profileName, setProfileName] = useState('')
   const [preset, setPreset] = useState('explorando')

@@ -110,7 +110,7 @@ function Rules({ profile }: { profile: YouthProfile }) {
     <section className="youth-intro">
       <p className="kicker">PERFIL {profile.label.toUpperCase()}</p>
       <h1>O QUE TÁ<br /><em>PROTEGIDO</em> AQUI.</h1>
-      <p>Sem lista de sites. Sem histórico. Só o combinado e o motivo dele existir.</p>
+      <p>Sem lista de sites aqui. O que é observado (não bloqueado) vira um resumo por período pros responsáveis — não uma lista de tudo que você visitou.</p>
     </section>
 
     <section className="youth-rules" aria-labelledby="youth-rules-title">
