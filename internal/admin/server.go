@@ -17,6 +17,7 @@ import (
 
 	"github.com/pmarkun/teendns/internal/config"
 	"github.com/pmarkun/teendns/internal/gateway"
+	"github.com/pmarkun/teendns/internal/pairing"
 	"github.com/pmarkun/teendns/internal/policy"
 )
 
@@ -26,6 +27,7 @@ type Server struct {
 	config         config.Config
 	profiles       *policy.Manager
 	events         *gateway.EventBuffer
+	pairings       *pairing.Manager
 	hostnameSuffix string
 	token          string
 }
@@ -37,9 +39,22 @@ type profileRequest struct {
 	Groups        []policy.RuleGroup `json:"groups"`
 }
 
-func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, events *gateway.EventBuffer, hostnameSuffix, token string) (*Server, error) {
+type youthRule struct {
+	Name   string `json:"name"`
+	Reason string `json:"reason"`
+}
+
+type youthProfile struct {
+	Label string      `json:"label"`
+	Rules []youthRule `json:"rules"`
+}
+
+func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, events *gateway.EventBuffer, pairings *pairing.Manager, hostnameSuffix, token string) (*Server, error) {
 	if strings.TrimSpace(token) == "" {
 		return nil, errors.New("admin token is required")
+	}
+	if pairings == nil {
+		return nil, errors.New("pairing manager is required")
 	}
 	if hostnameSuffix == "" {
 		hostnameSuffix = "dns.teendns.test"
@@ -49,6 +64,7 @@ func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, e
 		config:         cloneConfig(cfg),
 		profiles:       profiles,
 		events:         events,
+		pairings:       pairings,
 		hostnameSuffix: strings.TrimSuffix(strings.ToLower(hostnameSuffix), "."),
 		token:          token,
 	}, nil
@@ -67,9 +83,55 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", func(writer http.ResponseWriter, _ *http.Request) {
 		writeJSON(writer, http.StatusOK, map[string]string{"status": "ok"})
 	})
+	mux.HandleFunc("POST /api/v1/pairing/challenges", s.createPairingChallenge)
+	mux.HandleFunc("GET /api/v1/pairing/challenges/{id}", s.pairingChallengeStatus)
+	mux.HandleFunc("GET /api/v1/youth/profile", s.youthProfile)
 	mux.HandleFunc("/api/v1/profiles", s.authorize(s.profilesCollection))
 	mux.HandleFunc("/api/v1/profiles/", s.authorize(s.profileResource))
 	return withCORS(mux)
+}
+
+func (s *Server) createPairingChallenge(writer http.ResponseWriter, _ *http.Request) {
+	challenge, err := s.pairings.Create()
+	if err != nil {
+		writeError(writer, http.StatusServiceUnavailable, err)
+		return
+	}
+	writer.Header().Set("Cache-Control", "no-store")
+	writeJSON(writer, http.StatusCreated, challenge)
+}
+
+func (s *Server) pairingChallengeStatus(writer http.ResponseWriter, request *http.Request) {
+	status, ok := s.pairings.Status(request.PathValue("id"))
+	if !ok {
+		writeError(writer, http.StatusNotFound, errors.New("pairing challenge not found or expired"))
+		return
+	}
+	writer.Header().Set("Cache-Control", "no-store")
+	writeJSON(writer, http.StatusOK, status)
+}
+
+func (s *Server) youthProfile(writer http.ResponseWriter, request *http.Request) {
+	sessionToken := strings.TrimPrefix(request.Header.Get("Authorization"), "Bearer ")
+	profileID, ok := s.pairings.Profile(sessionToken)
+	if !ok {
+		writeError(writer, http.StatusUnauthorized, errors.New("invalid or expired pairing session"))
+		return
+	}
+	profile, ok := s.findProfile(profileID)
+	if !ok || profile.Disabled {
+		writeError(writer, http.StatusNotFound, errors.New("profile not found"))
+		return
+	}
+	result := youthProfile{Label: profile.Label, Rules: []youthRule{}}
+	for _, group := range profile.Groups {
+		if group.Action != policy.ActionBlock {
+			continue
+		}
+		result.Rules = append(result.Rules, youthRule{Name: group.Name, Reason: group.Reason})
+	}
+	writer.Header().Set("Cache-Control", "no-store")
+	writeJSON(writer, http.StatusOK, result)
 }
 
 func (s *Server) profilesCollection(writer http.ResponseWriter, request *http.Request) {

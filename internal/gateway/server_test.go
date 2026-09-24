@@ -55,3 +55,28 @@ func TestBlockedAliasEvaluatesCNAMETarget(t *testing.T) {
 		t.Fatalf("expected blocked CNAME target, got %+v, %v", decision, blocked)
 	}
 }
+
+type pairingStub struct {
+	profileID string
+	queryName string
+}
+
+func (p *pairingStub) Observe(profileID, queryName string) bool {
+	p.profileID = profileID
+	p.queryName = queryName
+	return true
+}
+
+func TestPairingChallengeIsObservedBeforePolicyResolution(t *testing.T) {
+	observer := &pairingStub{}
+	server := NewServer("", nil, nil, "", 300, nil, observer)
+	request := new(dns.Msg)
+	request.SetQuestion("token.pair.teendns.test.", dns.TypeAAAA)
+	response := server.resolve(policy.Profile{ID: "home", DefaultAction: policy.ActionAllow}, request)
+	if response.Rcode != dns.RcodeNameError {
+		t.Fatalf("expected pairing response to stop resolution, got %s", dns.RcodeToString[response.Rcode])
+	}
+	if observer.profileID != "home" || observer.queryName != "token.pair.teendns.test." {
+		t.Fatalf("unexpected pairing observation: %+v", observer)
+	}
+}

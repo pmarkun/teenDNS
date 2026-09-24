@@ -7,10 +7,13 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/pmarkun/teendns/internal/config"
 	"github.com/pmarkun/teendns/internal/gateway"
+	"github.com/pmarkun/teendns/internal/pairing"
 	"github.com/pmarkun/teendns/internal/policy"
 )
 
@@ -24,7 +27,7 @@ func TestUpdateProfilePersistsAndActivatesImmediately(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server, err := NewServer(path, cfg, manager, gateway.NewEventBuffer(), "dns.teendns.test", "secret")
+	server, err := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), "dns.teendns.test", "secret")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +65,7 @@ func TestCreateProfileGeneratesOpaqueEndpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	manager, _ := policy.NewManager(cfg.Profiles)
-	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), "dns.teendns.test", "secret")
+	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), "dns.teendns.test", "secret")
 
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/profiles", bytes.NewBufferString(`{"label":"Estudos"}`))
 	request.Header.Set("Authorization", "Bearer secret")
@@ -90,7 +93,7 @@ func TestAdminRequiresBearerToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	manager, _ := policy.NewManager(cfg.Profiles)
-	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), "dns.teendns.test", "secret")
+	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), "dns.teendns.test", "secret")
 	response := httptest.NewRecorder()
 	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/profiles", nil))
 	if response.Code != http.StatusUnauthorized {
@@ -122,6 +125,63 @@ func TestMergeGroupsRestoresServerDefaults(t *testing.T) {
 	if len(groups[0].Domains) != 2 || groups[0].Domains[0] != "one.test" || groups[0].DomainSource != "catalog.txt" {
 		t.Fatalf("defaults were not restored: %+v", groups[0])
 	}
+}
+
+func TestPairingSessionReturnsOnlyProtectedCategoryNamesAndReasons(t *testing.T) {
+	cfg := testConfig()
+	cfg.Profiles[0].Label = "Casa"
+	cfg.Profiles[0].Groups = []policy.RuleGroup{
+		{ID: "gambling", Name: "Apostas", Action: policy.ActionBlock, Reason: "Apostas envolvem dinheiro real", Domains: []string{"secret.bet"}},
+		{ID: "tracking", Name: "Rastreamento", Action: policy.ActionObserve, Reason: "Só observar", Domains: []string{"tracker.test"}},
+	}
+	path := filepath.Join(t.TempDir(), "gateway.json")
+	if err := config.WriteAtomic(path, cfg, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager, _ := policy.NewManager(cfg.Profiles)
+	pairings := testPairing()
+	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), pairings, "dns.teendns.test", "secret")
+
+	create := httptest.NewRequest(http.MethodPost, "/api/v1/pairing/challenges", nil)
+	created := httptest.NewRecorder()
+	server.Handler().ServeHTTP(created, create)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", created.Code, created.Body.String())
+	}
+	var challenge pairing.Challenge
+	if err := json.NewDecoder(created.Body).Decode(&challenge); err != nil {
+		t.Fatal(err)
+	}
+	if !pairings.Observe("home", challenge.DNSName) {
+		t.Fatal("could not pair challenge")
+	}
+
+	statusResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(statusResponse, httptest.NewRequest(http.MethodGet, "/api/v1/pairing/challenges/"+challenge.ID, nil))
+	var status pairing.Status
+	if err := json.NewDecoder(statusResponse.Body).Decode(&status); err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/youth/profile", nil)
+	request.Header.Set("Authorization", "Bearer "+status.SessionToken)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	if !strings.Contains(body, `"name":"Apostas"`) || !strings.Contains(body, `"reason":"Apostas envolvem dinheiro real"`) {
+		t.Fatalf("protected category missing: %s", body)
+	}
+	for _, hidden := range []string{"secret.bet", "Rastreamento", "tracker.test", "hostname", "profile_id"} {
+		if strings.Contains(body, hidden) {
+			t.Fatalf("youth response leaked %q: %s", hidden, body)
+		}
+	}
+}
+
+func testPairing() *pairing.Manager {
+	return pairing.NewManager("pair.teendns.test", time.Minute, time.Hour)
 }
 
 func testConfig() config.Config {

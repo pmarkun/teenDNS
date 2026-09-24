@@ -16,6 +16,7 @@ import (
 	"github.com/pmarkun/teendns/internal/config"
 	"github.com/pmarkun/teendns/internal/fixture"
 	"github.com/pmarkun/teendns/internal/gateway"
+	"github.com/pmarkun/teendns/internal/pairing"
 	"github.com/pmarkun/teendns/internal/policy"
 )
 
@@ -39,6 +40,7 @@ func runGateway(arguments []string) {
 	configPath := flags.String("config", "config.json", "configuration file")
 	adminListen := flags.String("admin-listen", ":8081", "administrative HTTP listen address")
 	hostnameSuffix := flags.String("hostname-suffix", "dns.teendns.test", "suffix for generated profile endpoints")
+	pairingSuffix := flags.String("pairing-suffix", "pair.teendns.test", "DNS suffix used for one-time pairing challenges")
 	_ = flags.Parse(arguments)
 
 	cfg, err := config.Load(*configPath)
@@ -60,6 +62,7 @@ func runGateway(arguments []string) {
 	signal.Notify(reload, syscall.SIGHUP)
 	defer signal.Stop(reload)
 	eventBuffer := gateway.NewEventBuffer()
+	pairingManager := pairing.NewManager(*pairingSuffix, 2*time.Minute, time.Hour)
 	server := gateway.NewServer(
 		cfg.Listen,
 		&tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS13},
@@ -67,8 +70,9 @@ func runGateway(arguments []string) {
 		cfg.Upstream,
 		cfg.MaxTTL,
 		gateway.MultiEventSink{gateway.NewEventWriter(os.Stdout), eventBuffer},
+		pairingManager,
 	)
-	adminAPI, err := admin.NewServer(*configPath, cfg, profiles, eventBuffer, *hostnameSuffix, os.Getenv("TEENDNS_ADMIN_TOKEN"))
+	adminAPI, err := admin.NewServer(*configPath, cfg, profiles, eventBuffer, pairingManager, *hostnameSuffix, os.Getenv("TEENDNS_ADMIN_TOKEN"))
 	if err != nil {
 		log.Fatalf("configure admin API: %v", err)
 	}
