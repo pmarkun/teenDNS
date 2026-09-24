@@ -60,6 +60,28 @@ func TestWriteAtomicRoundTrip(t *testing.T) {
 	}
 }
 
+func TestLoadMigratesHousePrimaryEmailIntoEmails(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gateway.json")
+	contents := []byte(`{
+  "listen": ":853",
+  "upstream": "127.0.0.1:5353",
+  "certificate": "server.pem",
+  "private_key": "server-key.pem",
+  "profiles": [],
+  "houses": [{"id":"house-1","name":"Casa Silva","admin_token_hash":"abc","email":"responsavel@example.com"}]
+}`)
+	if err := os.WriteFile(path, contents, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Houses) != 1 || len(cfg.Houses[0].Emails) != 1 || cfg.Houses[0].Emails[0] != "responsavel@example.com" {
+		t.Fatalf("expected primary email migrated into Emails, got %+v", cfg.Houses[0])
+	}
+}
+
 func TestLoadAppliesDefaultTTL(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "gateway.json")
 	contents := []byte(`{

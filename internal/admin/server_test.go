@@ -133,6 +133,9 @@ func TestRegisterHouseConsumesInvitationAndScopesAdminToken(t *testing.T) {
 	if len(snapshot.Houses) != 1 || snapshot.Houses[0].Email != "responsavel@example.com" {
 		t.Fatalf("expected invitation email copied to house, got %+v", snapshot.Houses)
 	}
+	if len(snapshot.Houses[0].Emails) != 1 || snapshot.Houses[0].Emails[0] != "responsavel@example.com" {
+		t.Fatalf("expected invitation email copied to house admin emails, got %+v", snapshot.Houses[0].Emails)
+	}
 	if len(snapshot.Invitations) != 1 || snapshot.Invitations[0].Email != "" || snapshot.Invitations[0].UsedAt == nil {
 		t.Fatalf("expected invitation redacted and marked used, got %+v", snapshot.Invitations)
 	}
@@ -483,6 +486,152 @@ func TestListHousesRequiresOperatorAndCountsProfiles(t *testing.T) {
 	}
 	if len(result.Houses) != 1 || result.Houses[0].ProfileCount != 2 || result.Houses[0].Email != "a@example.com" {
 		t.Fatalf("unexpected house summary: %+v", result.Houses)
+	}
+	if len(result.Houses[0].Emails) != 1 || result.Houses[0].Emails[0] != "a@example.com" {
+		t.Fatalf("expected house summary to include admin emails, got %+v", result.Houses[0].Emails)
+	}
+}
+
+func TestAdminGuardRequiresOperatorToken(t *testing.T) {
+	cfg := testConfig()
+	path := filepath.Join(t.TempDir(), "gateway.json")
+	if err := config.WriteAtomic(path, cfg, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager, _ := policy.NewManager(cfg.Profiles)
+	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), testMagicLinks(), testDigestPurger(), "dns.teendns.test", "operator-secret", testMailer())
+
+	missing := httptest.NewRecorder()
+	server.Handler().ServeHTTP(missing, httptest.NewRequest(http.MethodGet, "/api/v1/admin/guard", nil))
+	if missing.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without a token, got %d", missing.Code)
+	}
+
+	houseToken, err := randomToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := server.update(func(cfg *config.Config) error {
+		cfg.Houses = append(cfg.Houses, config.House{ID: "house-1", Name: "Casa", AdminTokenHash: tokenHash(houseToken)})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	houseRequest := httptest.NewRequest(http.MethodGet, "/api/v1/admin/guard", nil)
+	houseRequest.Header.Set("Authorization", "Bearer "+houseToken)
+	houseResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(houseResponse, houseRequest)
+	if houseResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("expected house token to be rejected by admin guard, got %d", houseResponse.Code)
+	}
+
+	operatorRequest := httptest.NewRequest(http.MethodGet, "/api/v1/admin/guard", nil)
+	operatorRequest.Header.Set("Authorization", "Bearer operator-secret")
+	operatorResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(operatorResponse, operatorRequest)
+	if operatorResponse.Code != http.StatusOK {
+		t.Fatalf("expected operator token to pass, got %d: %s", operatorResponse.Code, operatorResponse.Body.String())
+	}
+}
+
+func TestSetHouseEmailsReplacesLoginAddresses(t *testing.T) {
+	cfg := testConfig()
+	cfg.Houses = []config.House{{ID: "house-1", Name: "Casa Silva", Email: "pai@example.com"}}
+	cfg.Profiles[0].HouseID = "house-1"
+	path := filepath.Join(t.TempDir(), "gateway.json")
+	if err := config.WriteAtomic(path, cfg, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager, _ := policy.NewManager(cfg.Profiles)
+	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), testMagicLinks(), testDigestPurger(), "dns.teendns.test", "operator-secret", testMailer())
+
+	forbidden := httptest.NewRequest(http.MethodPut, "/api/v1/houses/house-1/emails", bytes.NewBufferString(`{"emails":["x@example.com"]}`))
+	houseToken, _ := randomToken()
+	if err := server.update(func(cfg *config.Config) error {
+		cfg.Houses[0].AdminTokenHash = tokenHash(houseToken)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	forbidden.Header.Set("Authorization", "Bearer "+houseToken)
+	forbiddenResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(forbiddenResponse, forbidden)
+	if forbiddenResponse.Code != http.StatusForbidden {
+		t.Fatalf("expected house token to be rejected with 403, got %d", forbiddenResponse.Code)
+	}
+
+	invalid := httptest.NewRequest(http.MethodPut, "/api/v1/houses/house-1/emails", bytes.NewBufferString(`{"emails":["nope"]}`))
+	invalid.Header.Set("Authorization", "Bearer operator-secret")
+	invalidResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(invalidResponse, invalid)
+	if invalidResponse.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for an invalid email, got %d: %s", invalidResponse.Code, invalidResponse.Body.String())
+	}
+
+	body := bytes.NewBufferString(`{"emails":[" Pai@Example.com ", "mae@example.com", "pai@example.com", ""]}`)
+	request := httptest.NewRequest(http.MethodPut, "/api/v1/houses/house-1/emails", body)
+	request.Header.Set("Authorization", "Bearer operator-secret")
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", response.Code, response.Body.String())
+	}
+	var updated houseEmailsResponse
+	if err := json.NewDecoder(response.Body).Decode(&updated); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"pai@example.com", "mae@example.com"}
+	if updated.Email != "pai@example.com" || !slices.Equal(updated.Emails, want) {
+		t.Fatalf("unexpected updated emails: %+v", updated)
+	}
+	snapshot := server.Snapshot()
+	if snap := snapshot.Houses[0]; snap.Email != "pai@example.com" || !slices.Equal(snap.Emails, want) {
+		t.Fatalf("unexpected persisted house: %+v", snap)
+	}
+
+	missing := httptest.NewRequest(http.MethodPut, "/api/v1/houses/does-not-exist/emails", bytes.NewBufferString(`{"emails":["x@example.com"]}`))
+	missing.Header.Set("Authorization", "Bearer operator-secret")
+	missingResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(missingResponse, missing)
+	if missingResponse.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for an unknown house, got %d", missingResponse.Code)
+	}
+}
+
+func TestRequestMagicLinkAcceptsAnyHouseAdminEmail(t *testing.T) {
+	cfg := testConfig()
+	cfg.Houses = []config.House{{ID: "house-1", Name: "Casa Silva", Email: "pai@example.com", Emails: []string{"pai@example.com", "mae@example.com"}}}
+	cfg.Profiles[0].HouseID = "house-1"
+	path := filepath.Join(t.TempDir(), "gateway.json")
+	if err := config.WriteAtomic(path, cfg, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager, _ := policy.NewManager(cfg.Profiles)
+	mailer := &recordingMailer{}
+	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), testMagicLinks(), testDigestPurger(), "dns.teendns.test", "operator-secret", mailer)
+
+	for _, email := range []string{"pai@example.com", "mae@example.com", "MAE@example.com"} {
+		body := bytes.NewBufferString(`{"email":"` + email + `"}`)
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/magic-links", body)
+		request.Host = "teendns.lab.markun.com.br"
+		response := httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, request)
+		if response.Code != http.StatusOK {
+			t.Fatalf("expected 200 for %q, got %d: %s", email, response.Code, response.Body.String())
+		}
+		var result magicLinkResponse
+		if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+			t.Fatal(err)
+		}
+		if result.Status != "magic_link_sent" {
+			t.Fatalf("expected magic_link_sent for %q, got %q", email, result.Status)
+		}
+	}
+	if len(mailer.sent) != 3 {
+		t.Fatalf("expected three magic links sent, got %d", len(mailer.sent))
+	}
+	if snapshot := server.Snapshot(); len(snapshot.Waitlist) != 0 {
+		t.Fatalf("admin emails must not be waitlisted, got %+v", snapshot.Waitlist)
 	}
 }
 

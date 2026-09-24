@@ -116,10 +116,21 @@ type sessionResponse struct {
 }
 
 type houseSummaryResponse struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Email        string `json:"email,omitempty"`
-	ProfileCount int    `json:"profile_count"`
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Email        string   `json:"email,omitempty"`
+	Emails       []string `json:"emails"`
+	ProfileCount int      `json:"profile_count"`
+}
+
+type houseEmailsRequest struct {
+	Emails []string `json:"emails"`
+}
+
+type houseEmailsResponse struct {
+	ID     string   `json:"id"`
+	Email  string   `json:"email,omitempty"`
+	Emails []string `json:"emails"`
 }
 
 type waitlistEntryResponse struct {
@@ -206,12 +217,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", func(writer http.ResponseWriter, _ *http.Request) {
 		writeJSON(writer, http.StatusOK, map[string]string{"status": "ok"})
 	})
+	mux.HandleFunc("GET /api/v1/admin/guard", s.adminGuard)
 	mux.HandleFunc("POST /api/v1/pairing/challenges", s.createPairingChallenge)
 	mux.HandleFunc("GET /api/v1/pairing/challenges/{id}", s.pairingChallengeStatus)
 	mux.HandleFunc("GET /api/v1/youth/profile", s.youthProfile)
 	mux.HandleFunc("POST /api/v1/houses", s.registerHouse)
 	mux.HandleFunc("GET /api/v1/houses", s.authorize(s.listHouses))
 	mux.HandleFunc("DELETE /api/v1/houses/{id}", s.authorize(s.deleteHouse))
+	mux.HandleFunc("PUT /api/v1/houses/{id}/emails", s.authorize(s.setHouseEmails))
 	mux.HandleFunc("POST /api/v1/invitations", s.authorize(s.createInvitation))
 	mux.HandleFunc("GET /api/v1/waitlist", s.authorize(s.listWaitlist))
 	mux.HandleFunc("POST /api/v1/auth/magic-links", s.requestMagicLink)
@@ -278,6 +291,9 @@ func (s *Server) registerHouse(writer http.ResponseWriter, request *http.Request
 		return
 	}
 	house := config.House{ID: houseIDToken[:12], Name: input.HouseName, AdminTokenHash: tokenHash(houseToken), Email: invitation.Email}
+	if invitation.Email != "" {
+		house.Emails = []string{invitation.Email}
+	}
 	groups, err := presetGroups(input.Preset, s.catalogDir)
 	if err != nil {
 		writeError(writer, http.StatusBadRequest, err)
@@ -409,6 +425,55 @@ func looksLikeEmail(value string) bool {
 	return strings.Contains(domain, ".") && !strings.ContainsAny(value, " \t\n")
 }
 
+// houseHasEmail reports whether email is one of the addresses the house
+// registered for magic-link login, including the primary one.
+func houseHasEmail(house config.House, email string) bool {
+	if strings.EqualFold(house.Email, email) {
+		return true
+	}
+	for _, candidate := range house.Emails {
+		if strings.EqualFold(candidate, email) {
+			return true
+		}
+	}
+	return false
+}
+
+// houseEmails returns the effective list of admin addresses for a house,
+// falling back to the primary email so hand-built configurations behave the
+// same as loaded ones (where Load migrates Email into Emails).
+func houseEmails(house config.House) []string {
+	if len(house.Emails) == 0 {
+		if house.Email != "" {
+			return []string{house.Email}
+		}
+		return []string{}
+	}
+	return house.Emails
+}
+
+// normalizeEmails trims, lowercases and deduplicates a list of addresses,
+// rejecting anything that does not look like an email.
+func normalizeEmails(values []string) ([]string, error) {
+	seen := make(map[string]struct{})
+	result := make([]string, 0, len(values))
+	for _, raw := range values {
+		email := strings.ToLower(strings.TrimSpace(raw))
+		if email == "" {
+			continue
+		}
+		if !looksLikeEmail(email) {
+			return nil, fmt.Errorf("e-mail inválido: %q", raw)
+		}
+		if _, exists := seen[email]; exists {
+			continue
+		}
+		seen[email] = struct{}{}
+		result = append(result, email)
+	}
+	return result, nil
+}
+
 // requestMagicLink is the public entry point of the email-first login flow:
 // a house with this email gets a one-time login link; anyone else gets
 // added to the waitlist for an operator to invite later.
@@ -427,7 +492,7 @@ func (s *Server) requestMagicLink(writer http.ResponseWriter, request *http.Requ
 	s.mu.RLock()
 	var houseID string
 	for _, house := range s.config.Houses {
-		if strings.EqualFold(house.Email, email) {
+		if houseHasEmail(house, email) {
 			houseID = house.ID
 			break
 		}
@@ -485,6 +550,59 @@ func (s *Server) createSession(writer http.ResponseWriter, request *http.Request
 	writeJSON(writer, http.StatusCreated, sessionResponse{SessionToken: sessionToken})
 }
 
+// adminGuard is the server-side gate for the operator console: it returns
+// 200 only when the Authorization header carries the operator token, so the
+// web app can refuse to render any admin content without a valid credential.
+func (s *Server) adminGuard(writer http.ResponseWriter, request *http.Request) {
+	provided := strings.TrimPrefix(request.Header.Get("Authorization"), "Bearer ")
+	if len(provided) == len(s.token) && subtle.ConstantTimeCompare([]byte(provided), []byte(s.token)) == 1 {
+		writeJSON(writer, http.StatusOK, map[string]bool{"operator": true})
+		return
+	}
+	writeError(writer, http.StatusUnauthorized, errors.New("chave de operador inválida"))
+}
+
+// setHouseEmails replaces the list of addresses allowed to log into a house's
+// panel via magic link. Only the global operator may change it; the first
+// address stays as the house's primary email, used for the weekly digest.
+func (s *Server) setHouseEmails(writer http.ResponseWriter, request *http.Request) {
+	if !requestScope(request).operator {
+		writeError(writer, http.StatusForbidden, errors.New("somente o operador pode editar os e-mails da casa"))
+		return
+	}
+	var input houseEmailsRequest
+	if err := decodeJSON(request, &input); err != nil {
+		writeError(writer, http.StatusBadRequest, err)
+		return
+	}
+	emails, err := normalizeEmails(input.Emails)
+	if err != nil {
+		writeError(writer, http.StatusBadRequest, err)
+		return
+	}
+	houseID := request.PathValue("id")
+	var updated config.House
+	err = s.update(func(cfg *config.Config) error {
+		index := slices.IndexFunc(cfg.Houses, func(house config.House) bool { return house.ID == houseID })
+		if index < 0 {
+			return errors.New("casa não encontrada")
+		}
+		cfg.Houses[index].Emails = emails
+		if len(emails) > 0 {
+			cfg.Houses[index].Email = emails[0]
+		} else {
+			cfg.Houses[index].Email = ""
+		}
+		updated = cfg.Houses[index]
+		return nil
+	})
+	if err != nil {
+		writeError(writer, http.StatusNotFound, err)
+		return
+	}
+	writeJSON(writer, http.StatusOK, houseEmailsResponse{ID: updated.ID, Email: updated.Email, Emails: append([]string{}, updated.Emails...)})
+}
+
 func (s *Server) listHouses(writer http.ResponseWriter, request *http.Request) {
 	if !requestScope(request).operator {
 		writeError(writer, http.StatusForbidden, errors.New("somente o operador pode listar casas"))
@@ -500,7 +618,7 @@ func (s *Server) listHouses(writer http.ResponseWriter, request *http.Request) {
 				count++
 			}
 		}
-		houses = append(houses, houseSummaryResponse{ID: house.ID, Name: house.Name, Email: house.Email, ProfileCount: count})
+		houses = append(houses, houseSummaryResponse{ID: house.ID, Name: house.Name, Email: house.Email, Emails: append([]string{}, houseEmails(house)...), ProfileCount: count})
 	}
 	writeJSON(writer, http.StatusOK, map[string]any{"houses": houses})
 }
@@ -1160,7 +1278,11 @@ func randomToken() (string, error) {
 
 func cloneConfig(cfg config.Config) config.Config {
 	result := cfg
-	result.Houses = append([]config.House{}, cfg.Houses...)
+	result.Houses = make([]config.House, len(cfg.Houses))
+	for index, house := range cfg.Houses {
+		result.Houses[index] = house
+		result.Houses[index].Emails = append([]string{}, house.Emails...)
+	}
 	result.Invitations = append([]config.Invitation{}, cfg.Invitations...)
 	result.Waitlist = append([]config.WaitlistEntry{}, cfg.Waitlist...)
 	result.Profiles = make([]policy.Profile, len(cfg.Profiles))

@@ -315,6 +315,7 @@ h1, h2, h3, .button, .logo { font-family: 'Barlow Condensed', Impact, 'Arial Nar
 .admin-rows li:first-child { border-top: none; }
 .admin-rows small { display: block; font-weight: 600; opacity: .75; }
 .admin-rows .button { width: auto; padding: 10px 18px; }
+.admin-row-actions { display: flex; gap: 8px; }
 .preset-picker { margin: 28px 0; padding: 0; border: 0; }
 .preset-picker legend { font-family: 'Barlow Condensed'; font-size: 27px; font-weight: 900; }
 .preset-picker > p { margin: 3px 0 13px; color: var(--muted); font-size: 13px; line-height: 1.4; }

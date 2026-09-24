@@ -67,6 +67,7 @@ export type HouseSummary = {
   id: string
   name: string
   email?: string
+  emails: string[]
   profile_count: number
 }
 
@@ -105,7 +106,7 @@ const tokenKey = 'teendns-admin-token'
 const pairingTokenKey = 'teendns-pairing-token'
 
 export function getToken() {
-  return sessionStorage.getItem(tokenKey) || import.meta.env.VITE_ADMIN_TOKEN || ''
+  return sessionStorage.getItem(tokenKey) || ''
 }
 
 export function setToken(value: string) {
@@ -142,6 +143,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  async adminGuard() {
+    try {
+      await request<{ operator: boolean }>('/api/v1/admin/guard')
+      return true
+    } catch {
+      return false
+    }
+  },
   createInvitation(email: string) {
     return request<Invitation>('/api/v1/invitations', {
       method: 'POST',
@@ -166,6 +175,12 @@ export const api = {
   },
   deleteHouse(id: string) {
     return request<void>(`/api/v1/houses/${id}`, { method: 'DELETE' })
+  },
+  updateHouseEmails(id: string, emails: string[]) {
+    return request<{ id: string; email?: string; emails: string[] }>(`/api/v1/houses/${id}/emails`, {
+      method: 'PUT',
+      body: JSON.stringify({ emails }),
+    })
   },
   async listWaitlist() {
     const result = await request<{ waitlist: WaitlistEntry[] }>('/api/v1/waitlist')
