@@ -18,7 +18,7 @@ export function Panel() {
     [profiles, selectedID],
   )
   const groups = selected?.groups || []
-  const activePackageCount = packages.filter((item) => groups.some((group) => group.id === item.id)).length
+  const activePackageCount = packages.filter((item) => groups.some((group) => group.id === item.id && group.domains.length > 0)).length
 
   const load = useCallback(async () => {
     try {
@@ -248,7 +248,7 @@ function PackagesDrawer({ profile, packages, onClose, onSaved }: { profile: Prof
     <div className="package-list">
       {packages.map((item) => {
         const group = (profile.groups || []).find((candidate) => candidate.id === item.id)
-        const enabled = Boolean(group)
+        const enabled = Boolean(group && group.domains.length > 0)
         const action = group?.action || item.suggested_action
         const busy = busyID === item.id
         return <article className={`package-row ${enabled ? 'is-enabled' : ''}`} key={item.id}>
