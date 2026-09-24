@@ -468,10 +468,11 @@ func mergeGroups(existing, incoming []policy.RuleGroup) ([]policy.RuleGroup, err
 		if group.ID == "" || group.Name == "" {
 			return nil, fmt.Errorf("group %d requires id and name", index)
 		}
-		if len(group.Domains) == 0 {
+		stored, exists := known[group.ID]
+		if len(group.Domains) == 0 && !exists {
 			return nil, fmt.Errorf("group %q requires at least one domain", group.Name)
 		}
-		if stored, ok := known[group.ID]; ok {
+		if exists {
 			group.DomainSource = stored.DomainSource
 			group.DefaultDomains = append([]string(nil), stored.DefaultDomains...)
 			if !group.Customized && len(group.DefaultDomains) > 0 {

@@ -243,6 +243,19 @@ func TestMergeGroupsRestoresServerDefaults(t *testing.T) {
 	}
 }
 
+func TestMergeGroupsKeepsExistingEmptyPlaceholder(t *testing.T) {
+	existing := []policy.RuleGroup{{
+		ID: "adult", Name: "Conteúdo adulto", Action: policy.ActionBlock, Domains: []string{},
+	}}
+	groups, err := mergeGroups(existing, existing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(groups) != 1 || groups[0].Domains == nil || len(groups[0].Domains) != 0 {
+		t.Fatalf("unexpected empty placeholder: %+v", groups)
+	}
+}
+
 func TestPairingSessionReturnsOnlyProtectedCategoryNamesAndReasons(t *testing.T) {
 	cfg := testConfig()
 	cfg.Profiles[0].Label = "Casa"
