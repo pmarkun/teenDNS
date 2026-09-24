@@ -53,6 +53,14 @@ func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, e
 	}, nil
 }
 
+// Reload keeps the control plane in sync when an operator uses the legacy
+// SIGHUP configuration path.
+func (s *Server) Reload(cfg config.Config) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.config = cloneConfig(cfg)
+}
+
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(writer http.ResponseWriter, _ *http.Request) {
@@ -311,7 +319,8 @@ func cloneConfig(cfg config.Config) config.Config {
 	result.Profiles = make([]policy.Profile, len(cfg.Profiles))
 	for index, profile := range cfg.Profiles {
 		result.Profiles[index] = profile
-		result.Profiles[index].Rules = append([]policy.Rule(nil), profile.Rules...)
+		result.Profiles[index].Rules = make([]policy.Rule, len(profile.Rules))
+		copy(result.Profiles[index].Rules, profile.Rules)
 	}
 	return result
 }

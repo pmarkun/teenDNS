@@ -59,20 +59,6 @@ func runGateway(arguments []string) {
 	reload := make(chan os.Signal, 1)
 	signal.Notify(reload, syscall.SIGHUP)
 	defer signal.Stop(reload)
-	go func() {
-		for range reload {
-			updated, err := config.Load(*configPath)
-			if err != nil {
-				log.Printf("reload config: %v", err)
-				continue
-			}
-			if err := profiles.Replace(updated.Profiles); err != nil {
-				log.Printf("reload profiles: %v", err)
-				continue
-			}
-			log.Printf("reloaded %d profiles", len(updated.Profiles))
-		}
-	}()
 	eventBuffer := gateway.NewEventBuffer()
 	server := gateway.NewServer(
 		cfg.Listen,
@@ -86,6 +72,21 @@ func runGateway(arguments []string) {
 	if err != nil {
 		log.Fatalf("configure admin API: %v", err)
 	}
+	go func() {
+		for range reload {
+			updated, err := config.Load(*configPath)
+			if err != nil {
+				log.Printf("reload config: %v", err)
+				continue
+			}
+			if err := profiles.Replace(updated.Profiles); err != nil {
+				log.Printf("reload profiles: %v", err)
+				continue
+			}
+			adminAPI.Reload(updated)
+			log.Printf("reloaded %d profiles", len(updated.Profiles))
+		}
+	}()
 	httpServer := &http.Server{
 		Addr:              *adminListen,
 		Handler:           adminAPI.Handler(),
