@@ -97,6 +97,18 @@ export type PairingStatus = {
   expires_at?: string
 }
 
+export type SetupInfo = {
+  hostname: string
+  ip?: string
+  port: string
+  test_domain: string
+}
+
+export type PairingOutcome = {
+  observed: boolean
+  profile_id?: string
+}
+
 export type YouthProfile = {
   label: string
   rules: Array<{ name: string; reason: string }>
@@ -239,6 +251,25 @@ export const api = {
   },
   pairingStatus(challengeID: string) {
     return request<PairingStatus>(`/api/v1/pairing/challenges/${challengeID}`)
+  },
+  pairingOutcome(challengeID: string) {
+    return request<PairingOutcome>(`/api/v1/pairing/challenges/${challengeID}/outcome`)
+  },
+  setupInfo(profileID: string) {
+    return request<SetupInfo>(`/api/v1/profiles/${profileID}/setup/info`)
+  },
+  async downloadSetupFile(profileID: string, kind: 'windows.bat' | 'windows-remove.bat' | 'apple.mobileconfig') {
+    const response = await fetch(`/api/v1/profiles/${profileID}/setup/${kind}`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}))
+      throw new Error(body.error || `Falha ${response.status}`)
+    }
+    const text = await response.text()
+    const disposition = response.headers.get('Content-Disposition') || ''
+    const match = disposition.match(/filename="([^"]+)"/)
+    return { filename: match ? match[1] : kind, text }
   },
   youthProfile(sessionToken: string) {
     return request<YouthProfile>('/api/v1/youth/profile', {
