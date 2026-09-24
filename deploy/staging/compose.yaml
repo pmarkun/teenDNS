@@ -38,6 +38,7 @@ services:
       - "853:853"
     environment:
       TEENDNS_ADMIN_TOKEN: ${TEENDNS_ADMIN_TOKEN:?set TEENDNS_ADMIN_TOKEN in .env}
+      TEENDNS_INVITATION_CODES: ${TEENDNS_INVITATION_CODES:-}
     user: "1000:1000"
     volumes:
       - ${TEENDNS_RUNTIME_DIR:-./runtime}:/runtime

@@ -11,12 +11,20 @@ import (
 )
 
 type Config struct {
-	Listen      string           `json:"listen"`
-	Upstream    string           `json:"upstream"`
-	Certificate string           `json:"certificate"`
-	PrivateKey  string           `json:"private_key"`
-	MaxTTL      uint32           `json:"max_ttl"`
-	Profiles    []policy.Profile `json:"profiles"`
+	Listen             string           `json:"listen"`
+	Upstream           string           `json:"upstream"`
+	Certificate        string           `json:"certificate"`
+	PrivateKey         string           `json:"private_key"`
+	MaxTTL             uint32           `json:"max_ttl"`
+	Houses             []House          `json:"houses,omitempty"`
+	UsedInvitationKeys []string         `json:"used_invitation_keys,omitempty"`
+	Profiles           []policy.Profile `json:"profiles"`
+}
+
+type House struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	AdminTokenHash string `json:"admin_token_hash"`
 }
 
 func Load(path string) (Config, error) {

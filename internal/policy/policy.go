@@ -37,6 +37,7 @@ type RuleGroup struct {
 
 type Profile struct {
 	ID            string      `json:"id"`
+	HouseID       string      `json:"house_id,omitempty"`
 	Label         string      `json:"label,omitempty"`
 	Hostname      string      `json:"hostname"`
 	Disabled      bool        `json:"disabled,omitempty"`

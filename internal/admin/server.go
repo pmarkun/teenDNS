@@ -1,9 +1,12 @@
 package admin
 
 import (
+	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base32"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,13 +33,38 @@ type Server struct {
 	pairings       *pairing.Manager
 	hostnameSuffix string
 	token          string
+	invitationKeys []string
 }
+
+type accessScope struct {
+	operator bool
+	houseID  string
+}
+
+type accessContextKey struct{}
 
 type profileRequest struct {
 	Label         string             `json:"label"`
 	DefaultAction policy.Action      `json:"default_action"`
 	Rules         []policy.Rule      `json:"rules"`
 	Groups        []policy.RuleGroup `json:"groups"`
+}
+
+type registrationRequest struct {
+	InvitationCode string `json:"invitation_code"`
+	HouseName      string `json:"house_name"`
+	ProfileName    string `json:"profile_name"`
+}
+
+type registrationResponse struct {
+	House      houseResponse  `json:"house"`
+	AdminToken string         `json:"admin_token"`
+	Profile    policy.Profile `json:"profile"`
+}
+
+type houseResponse struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 type youthRule struct {
@@ -67,6 +95,7 @@ func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, e
 		pairings:       pairings,
 		hostnameSuffix: strings.TrimSuffix(strings.ToLower(hostnameSuffix), "."),
 		token:          token,
+		invitationKeys: splitInvitationKeys(os.Getenv("TEENDNS_INVITATION_CODES")),
 	}, nil
 }
 
@@ -86,9 +115,76 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/pairing/challenges", s.createPairingChallenge)
 	mux.HandleFunc("GET /api/v1/pairing/challenges/{id}", s.pairingChallengeStatus)
 	mux.HandleFunc("GET /api/v1/youth/profile", s.youthProfile)
+	mux.HandleFunc("POST /api/v1/houses", s.registerHouse)
 	mux.HandleFunc("/api/v1/profiles", s.authorize(s.profilesCollection))
 	mux.HandleFunc("/api/v1/profiles/", s.authorize(s.profileResource))
 	return withCORS(mux)
+}
+
+func (s *Server) registerHouse(writer http.ResponseWriter, request *http.Request) {
+	var input registrationRequest
+	if err := decodeJSON(request, &input); err != nil {
+		writeError(writer, http.StatusBadRequest, err)
+		return
+	}
+	input.HouseName = strings.TrimSpace(input.HouseName)
+	input.ProfileName = strings.TrimSpace(input.ProfileName)
+	if input.HouseName == "" || input.ProfileName == "" {
+		writeError(writer, http.StatusBadRequest, errors.New("nome da casa e do primeiro perfil são obrigatórios"))
+		return
+	}
+	if len([]rune(input.HouseName)) > 80 || len([]rune(input.ProfileName)) > 80 {
+		writeError(writer, http.StatusBadRequest, errors.New("use nomes com até 80 caracteres"))
+		return
+	}
+	invitationKey := tokenHash(strings.TrimSpace(input.InvitationCode))
+	if !containsConstantTime(s.invitationKeys, invitationKey) {
+		writeError(writer, http.StatusForbidden, errors.New("convite inválido ou já usado"))
+		return
+	}
+	houseToken, err := randomToken()
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, err)
+		return
+	}
+	houseIDToken, err := randomToken()
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, err)
+		return
+	}
+	profileToken, err := randomToken()
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, err)
+		return
+	}
+	house := config.House{ID: houseIDToken[:12], Name: input.HouseName, AdminTokenHash: tokenHash(houseToken)}
+	profile := policy.Profile{
+		ID:            profileToken[:12],
+		HouseID:       house.ID,
+		Label:         input.ProfileName,
+		Hostname:      "p-" + profileToken + "." + s.hostnameSuffix,
+		DefaultAction: policy.ActionAllow,
+		Version:       1,
+		Rules:         []policy.Rule{},
+		Groups:        []policy.RuleGroup{},
+	}
+	err = s.update(func(cfg *config.Config) error {
+		if slices.Contains(cfg.UsedInvitationKeys, invitationKey) {
+			return errors.New("convite inválido ou já usado")
+		}
+		cfg.UsedInvitationKeys = append(cfg.UsedInvitationKeys, invitationKey)
+		cfg.Houses = append(cfg.Houses, house)
+		cfg.Profiles = append(cfg.Profiles, profile)
+		return nil
+	})
+	if err != nil {
+		writeError(writer, http.StatusForbidden, err)
+		return
+	}
+	writer.Header().Set("Cache-Control", "no-store")
+	writeJSON(writer, http.StatusCreated, registrationResponse{
+		House: houseResponse{ID: house.ID, Name: house.Name}, AdminToken: houseToken, Profile: profile,
+	})
 }
 
 func (s *Server) createPairingChallenge(writer http.ResponseWriter, _ *http.Request) {
@@ -138,7 +234,7 @@ func (s *Server) profilesCollection(writer http.ResponseWriter, request *http.Re
 	switch request.Method {
 	case http.MethodGet:
 		s.mu.RLock()
-		profiles := append([]policy.Profile(nil), s.config.Profiles...)
+		profiles := filterProfiles(s.config.Profiles, requestScope(request))
 		s.mu.RUnlock()
 		writeJSON(writer, http.StatusOK, map[string]any{"profiles": profiles})
 	case http.MethodPost:
@@ -159,6 +255,7 @@ func (s *Server) profilesCollection(writer http.ResponseWriter, request *http.Re
 		}
 		profile := policy.Profile{
 			ID:            token[:12],
+			HouseID:       requestScope(request).houseID,
 			Label:         input.Label,
 			Hostname:      "p-" + token + "." + s.hostnameSuffix,
 			DefaultAction: policy.ActionAllow,
@@ -188,6 +285,11 @@ func (s *Server) profileResource(writer http.ResponseWriter, request *http.Reque
 		return
 	}
 	id := parts[0]
+	profile, ok := s.findProfile(id)
+	if !ok || !scopeAllows(requestScope(request), profile) {
+		writeError(writer, http.StatusNotFound, errors.New("profile not found"))
+		return
+	}
 	if len(parts) == 2 && parts[1] == "rotate-endpoint" && request.Method == http.MethodPost {
 		s.rotateEndpoint(writer, id)
 		return
@@ -203,11 +305,6 @@ func (s *Server) profileResource(writer http.ResponseWriter, request *http.Reque
 
 	switch request.Method {
 	case http.MethodGet:
-		profile, ok := s.findProfile(id)
-		if !ok {
-			writeError(writer, http.StatusNotFound, errors.New("profile not found"))
-			return
-		}
 		writeJSON(writer, http.StatusOK, profile)
 	case http.MethodPut:
 		var input profileRequest
@@ -383,12 +480,71 @@ func mergeGroups(existing, incoming []policy.RuleGroup) ([]policy.RuleGroup, err
 func (s *Server) authorize(next http.HandlerFunc) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		provided := strings.TrimPrefix(request.Header.Get("Authorization"), "Bearer ")
-		if len(provided) != len(s.token) || subtle.ConstantTimeCompare([]byte(provided), []byte(s.token)) != 1 {
+		if len(provided) == len(s.token) && subtle.ConstantTimeCompare([]byte(provided), []byte(s.token)) == 1 {
+			next(writer, request.WithContext(context.WithValue(request.Context(), accessContextKey{}, accessScope{operator: true})))
+			return
+		}
+		providedHash := tokenHash(provided)
+		s.mu.RLock()
+		var houseID string
+		for _, house := range s.config.Houses {
+			if constantTimeEqual(house.AdminTokenHash, providedHash) {
+				houseID = house.ID
+			}
+		}
+		s.mu.RUnlock()
+		if houseID == "" {
 			writeError(writer, http.StatusUnauthorized, errors.New("invalid admin token"))
 			return
 		}
-		next(writer, request)
+		next(writer, request.WithContext(context.WithValue(request.Context(), accessContextKey{}, accessScope{houseID: houseID})))
 	}
+}
+
+func requestScope(request *http.Request) accessScope {
+	scope, _ := request.Context().Value(accessContextKey{}).(accessScope)
+	return scope
+}
+
+func scopeAllows(scope accessScope, profile policy.Profile) bool {
+	return scope.operator || (scope.houseID != "" && profile.HouseID == scope.houseID)
+}
+
+func filterProfiles(profiles []policy.Profile, scope accessScope) []policy.Profile {
+	result := make([]policy.Profile, 0, len(profiles))
+	for _, profile := range profiles {
+		if scopeAllows(scope, profile) {
+			result = append(result, profile)
+		}
+	}
+	return result
+}
+
+func splitInvitationKeys(value string) []string {
+	keys := []string{}
+	for _, code := range strings.Split(value, ",") {
+		if code = strings.TrimSpace(code); code != "" {
+			keys = append(keys, tokenHash(code))
+		}
+	}
+	return keys
+}
+
+func containsConstantTime(values []string, wanted string) bool {
+	found := 0
+	for _, value := range values {
+		found |= subtle.ConstantTimeCompare([]byte(value), []byte(wanted))
+	}
+	return found == 1
+}
+
+func constantTimeEqual(left, right string) bool {
+	return len(left) == len(right) && subtle.ConstantTimeCompare([]byte(left), []byte(right)) == 1
+}
+
+func tokenHash(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])
 }
 
 func withCORS(next http.Handler) http.Handler {
@@ -418,6 +574,8 @@ func randomToken() (string, error) {
 
 func cloneConfig(cfg config.Config) config.Config {
 	result := cfg
+	result.Houses = append([]config.House{}, cfg.Houses...)
+	result.UsedInvitationKeys = append([]string{}, cfg.UsedInvitationKeys...)
 	result.Profiles = make([]policy.Profile, len(cfg.Profiles))
 	for index, profile := range cfg.Profiles {
 		result.Profiles[index] = profile

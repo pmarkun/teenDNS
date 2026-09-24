@@ -86,6 +86,66 @@ func TestCreateProfileGeneratesOpaqueEndpoint(t *testing.T) {
 	}
 }
 
+func TestRegisterHouseConsumesInvitationAndScopesAdminToken(t *testing.T) {
+	t.Setenv("TEENDNS_INVITATION_CODES", "convite-unico")
+	cfg := testConfig()
+	path := filepath.Join(t.TempDir(), "gateway.json")
+	if err := config.WriteAtomic(path, cfg, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager, _ := policy.NewManager(cfg.Profiles)
+	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), "dns.teendns.test", "operator-secret")
+
+	register := func() *httptest.ResponseRecorder {
+		body := bytes.NewBufferString(`{"invitation_code":"convite-unico","house_name":"Casa Silva","profile_name":"Lia"}`)
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/houses", body)
+		response := httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, request)
+		return response
+	}
+
+	response := register()
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", response.Code, response.Body.String())
+	}
+	var created registrationResponse
+	if err := json.NewDecoder(response.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	if created.House.Name != "Casa Silva" || created.AdminToken == "" || created.Profile.HouseID != created.House.ID {
+		t.Fatalf("unexpected registration: %+v", created)
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/profiles", nil)
+	request.Header.Set("Authorization", "Bearer "+created.AdminToken)
+	profilesResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(profilesResponse, request)
+	if profilesResponse.Code != http.StatusOK {
+		t.Fatalf("expected scoped token to work, got %d: %s", profilesResponse.Code, profilesResponse.Body.String())
+	}
+	var result struct {
+		Profiles []policy.Profile `json:"profiles"`
+	}
+	if err := json.NewDecoder(profilesResponse.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Profiles) != 1 || result.Profiles[0].HouseID != created.House.ID {
+		t.Fatalf("house token leaked profiles: %+v", result.Profiles)
+	}
+	legacyRequest := httptest.NewRequest(http.MethodGet, "/api/v1/profiles/home", nil)
+	legacyRequest.Header.Set("Authorization", "Bearer "+created.AdminToken)
+	legacyResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(legacyResponse, legacyRequest)
+	if legacyResponse.Code != http.StatusNotFound {
+		t.Fatalf("expected another house profile to stay hidden, got %d", legacyResponse.Code)
+	}
+
+	reused := register()
+	if reused.Code != http.StatusForbidden {
+		t.Fatalf("expected reused invitation to fail, got %d: %s", reused.Code, reused.Body.String())
+	}
+}
+
 func TestAdminRequiresBearerToken(t *testing.T) {
 	cfg := testConfig()
 	path := filepath.Join(t.TempDir(), "gateway.json")
