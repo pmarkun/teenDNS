@@ -8,6 +8,7 @@ export function Landing() {
         <nav aria-label="Navegação principal">
           <a href="#como">como funciona</a>
           <a href="#configurar">configurar</a>
+          <a className="youth-nav" href="/meu-dns">minhas regras</a>
           <a className="button button--acid" href="/painel">ABRIR PAINEL</a>
         </nav>
       </header>

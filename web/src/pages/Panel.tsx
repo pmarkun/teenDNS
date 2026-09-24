@@ -63,7 +63,7 @@ export function Panel() {
     <main className="panel">
       <header className="panel-header">
         <Logo />
-        <nav><a href="/#como">entenda</a><a href="/#configurar">ajuda</a></nav>
+        <nav><a href="/#como">entenda</a><a href="/meu-dns">visão jovem</a><a href="/#configurar">ajuda</a></nav>
         <div className={`service-status ${status !== 'tá rodando' ? 'service-status--busy' : ''}`} aria-live="polite">
           <i /> {status}
         </div>

@@ -40,7 +40,25 @@ export type EventSummary = {
   categories: Array<{ category: string; count: number }>
 }
 
+export type PairingChallenge = {
+  id: string
+  dns_name: string
+  expires_at: string
+}
+
+export type PairingStatus = {
+  paired: boolean
+  session_token?: string
+  expires_at?: string
+}
+
+export type YouthProfile = {
+  label: string
+  rules: Array<{ name: string; reason: string }>
+}
+
 const tokenKey = 'teendns-admin-token'
+const pairingTokenKey = 'teendns-pairing-token'
 
 export function getToken() {
   return sessionStorage.getItem(tokenKey) || import.meta.env.VITE_ADMIN_TOKEN || ''
@@ -48,6 +66,15 @@ export function getToken() {
 
 export function setToken(value: string) {
   sessionStorage.setItem(tokenKey, value)
+}
+
+export function getPairingToken() {
+  return sessionStorage.getItem(pairingTokenKey) || ''
+}
+
+export function setPairingToken(value: string) {
+  if (value) sessionStorage.setItem(pairingTokenKey, value)
+  else sessionStorage.removeItem(pairingTokenKey)
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -93,5 +120,16 @@ export const api = {
   },
   summary(profileID: string) {
     return request<EventSummary>(`/api/v1/profiles/${profileID}/summary`)
+  },
+  createPairingChallenge() {
+    return request<PairingChallenge>('/api/v1/pairing/challenges', { method: 'POST' })
+  },
+  pairingStatus(challengeID: string) {
+    return request<PairingStatus>(`/api/v1/pairing/challenges/${challengeID}`)
+  },
+  youthProfile(sessionToken: string) {
+    return request<YouthProfile>('/api/v1/youth/profile', {
+      headers: { Authorization: `Bearer ${sessionToken}` },
+    })
   },
 }
