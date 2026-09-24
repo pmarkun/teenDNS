@@ -8,6 +8,20 @@ Documentação técnica:
 - [Estado da execução](docs/status.md)
 - [Laboratório local](docs/laboratorio.md)
 - [Ameaças e limites](docs/ameacas-e-limites.md)
+- [Sistema visual](docs/design-system.md)
+
+## Abrir o MVP local
+
+```bash
+./scripts/lab-up.sh
+```
+
+- página explicativa: `http://127.0.0.1:18082/`;
+- painel: `http://127.0.0.1:18082/painel`;
+- chave administrativa exclusiva do laboratório: `teendns-lab`.
+
+Alterações feitas no painel são validadas, gravadas em `.local/gateway.json` e
+ativadas em memória sem reiniciar o resolvedor.
 - [Critérios de classificação etária](docs/criterios-classificacao-etaria.md)
 - [Serviço de classificação de URLs](docs/classifier-service.md)
 

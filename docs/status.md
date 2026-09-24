@@ -9,8 +9,8 @@ Atualizado em 23 de setembro de 2026. Branch: `feat/dot-lab`.
 | M1 — DNS no laboratório | Concluído | Consulta DNS-over-TLS atravessa gateway e Unbound e recebe resposta determinística da fixture |
 | M2 — Mini-DNS por perfil | Concluído | Ana bloqueia `blocked.test`; Bia resolve o mesmo domínio pelo mesmo IP e porta |
 | M3 — Cache seguro | Concluído | Dois perfis usam uma consulta upstream; TTL é limitado; política recarrega atomicamente; CNAME não contorna bloqueio |
-| M4 — Autoprovisionamento | Próximo | Ainda não iniciado |
-| M5 — Camada educativa | Pendente | Requer contrato de conteúdo e direção visual |
+| M4 — Autoprovisionamento | Concluído no laboratório | Painel cria perfis, edita regras, gira endpoints e ativa mudanças sem reiniciar o DNS |
+| M5 — Camada educativa | Em andamento | Página pública e linguagem visual concluídas; pedido e contestação ainda pendentes |
 | M6 — Aparelho real | Pendente | Requer domínio, certificado público e staging na porta 853 |
 | M7 — Piloto controlado | Pendente | Requer revisão de privacidade, autenticação e operação |
 
@@ -19,10 +19,11 @@ Atualizado em 23 de setembro de 2026. Branch: `feat/dot-lab`.
 ### Testes de código
 
 ```text
-nix develop --command go test ./...
-nix develop --command go vet ./...
-nix develop --command go test -race ./...
+nix develop --command go test ./cmd/... ./internal/...
+nix develop --command go vet ./cmd/... ./internal/...
+nix develop --command go test -race ./cmd/... ./internal/...
 docker compose config --quiet
+cd web && npm run lint && npm run build
 ```
 
 Resultado: todos passaram. A execução com detector de corridas não encontrou acesso concorrente inseguro na troca de políticas ou no gateway.
@@ -45,6 +46,18 @@ Casos confirmados:
 - cache compartilhado apenas para resposta pública;
 - TTL máximo de 300 segundos e bloqueio negativo de 30 segundos;
 - recarga por `SIGHUP` preservando a versão anterior em caso de erro.
+- alteração pelo painel aplicada ao DNS sem reiniciar o gateway;
+- página pública e painel servidos pelo mesmo laboratório.
+
+### Interface
+
+Validação no navegador conectado:
+
+- página pública em `1440 × 1000` e `390 × 844`;
+- painel em `1440 × 900` e `390 × 844`;
+- login local, troca de perfil, lista de regras e estados responsivos;
+- mudança de `blocked.test` de `Proteger` para `Permitir` produziu resposta
+  `NOERROR`; a restauração para `Proteger` voltou a produzir `NXDOMAIN`.
 
 ### Carga local
 
@@ -95,7 +108,7 @@ Esses números descrevem apenas esta máquina e o upstream local em cache. Não 
 - resolvedor recursivo contra a internet real sob carga;
 - IPv6;
 - cadeias DNAME e outros tipos DNS além de CNAME;
-- autenticação e autorização do painel;
+- autenticação multiusuário, recuperação de conta e autorização de produção;
 - persistência em PostgreSQL e retenção de eventos;
 - navegadores e aplicativos que forçam DoH próprio;
 - disponibilidade e recuperação em uma VPS real.

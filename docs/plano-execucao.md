@@ -2,7 +2,9 @@
 
 Versão inicial: 23 de setembro de 2026.
 
-Estado atual: M1, M2 e M3 concluídos no laboratório local. Resultados e lacunas estão registrados em [status.md](status.md). O próximo marco é M4 — autoprovisionamento.
+Estado atual: M1 a M4 concluídos no laboratório local. A página explicativa da
+M5 também está implementada; pedido e contestação continuam pendentes.
+Resultados e lacunas estão registrados em [status.md](status.md).
 
 ## 1. Objetivo da validação
 

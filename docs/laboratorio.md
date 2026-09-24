@@ -8,7 +8,8 @@ O laboratório comprova o uso de vários perfis DNS-over-TLS no mesmo endereço.
 - Docker Engine;
 - Docker Compose v2.
 
-O ambiente Nix fornece Go e as ferramentas de desenvolvimento. Os containers não publicam nenhum serviço além do gateway DoT em `127.0.0.1:8853`.
+O ambiente Nix fornece Go, Node.js e as ferramentas de desenvolvimento. Todos
+os serviços são publicados apenas na interface local.
 
 ## Executar
 
@@ -40,6 +41,12 @@ Os dois endpoints chegam a `127.0.0.1:8853`. O cliente envia o endpoint como SNI
 - `fixture`: DNS UDP determinístico em `10.77.53.10:5353`;
 - `unbound`: resolvedor e cache em `10.77.53.20:5353`;
 - `gateway`: DNS-over-TLS em `10.77.53.30:853`, publicado localmente como `127.0.0.1:8853`.
+- `gateway` API: HTTP em `127.0.0.1:18081`;
+- `web`: página pública e painel em `http://127.0.0.1:18082`.
+
+O painel usa a chave `teendns-lab`, que existe somente para o laboratório. A API
+aceita `Authorization: Bearer teendns-lab`. Não reutilize essa chave fora do
+ambiente local.
 
 A faixa `10.77.53.0/24` foi escolhida porque as faixas Docker `172.17.0.0/16` a `172.31.0.0/16` já estavam ocupadas nesta máquina.
 
@@ -74,7 +81,13 @@ docker compose logs gateway
 
 Cada evento contém perfil, domínio, tipo de consulta, ação e versão da política. Não contém URL, caminho, título ou conteúdo.
 
-## Recarga de políticas
+## Alteração de políticas
+
+O caminho normal é o painel. A API valida a configuração completa, grava uma
+nova versão do arquivo por troca atômica e publica o novo snapshot em memória.
+Consultas novas já usam a regra sem reiniciar o gateway.
+
+O sinal `SIGHUP` continua disponível para testes e operação manual.
 
 O gateway mantém um snapshot imutável das políticas em memória. Ao receber `SIGHUP`, valida a configuração completa e troca o snapshot de forma atômica. Se a nova configuração for inválida, mantém a última versão válida.
 
