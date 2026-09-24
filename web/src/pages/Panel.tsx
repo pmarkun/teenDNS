@@ -153,6 +153,7 @@ function Login({ error, onSuccess }: { error: string; onSuccess: () => Promise<v
         <label>chave <input type="password" value={value} onChange={(event) => setValue(event.target.value)} autoFocus /></label>
         <button className="button button--ink">ENTRAR</button>
         {error && <small>{error}</small>}
+        <a className="login-invite" href="/comecar">tenho um convite →</a>
       </form>
     </main>
   )

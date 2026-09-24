@@ -22,6 +22,7 @@ export type RuleGroup = {
 
 export type Profile = {
   id: string
+  house_id?: string
   label?: string
   hostname: string
   disabled?: boolean
@@ -29,6 +30,12 @@ export type Profile = {
   version: number
   rules: Rule[]
   groups?: RuleGroup[]
+}
+
+export type HouseRegistration = {
+  house: { id: string; name: string }
+  admin_token: string
+  profile: Profile
 }
 
 export type EventSummary = {
@@ -94,6 +101,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  registerHouse(invitationCode: string, houseName: string, profileName: string) {
+    return request<HouseRegistration>('/api/v1/houses', {
+      method: 'POST',
+      body: JSON.stringify({
+        invitation_code: invitationCode,
+        house_name: houseName,
+        profile_name: profileName,
+      }),
+    })
+  },
   async profiles() {
     const result = await request<{ profiles: Profile[] }>('/api/v1/profiles')
     return result.profiles

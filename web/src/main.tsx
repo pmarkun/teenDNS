@@ -8,12 +8,14 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Landing } from './pages/Landing'
 import { Panel } from './pages/Panel'
+import { Register } from './pages/Register'
 import { Youth } from './pages/Youth'
 import './styles.css'
 
 const isPanel = window.location.pathname.startsWith('/painel')
 const isYouth = window.location.pathname.startsWith('/meu-dns')
+const isRegister = window.location.pathname.startsWith('/comecar')
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>{isPanel ? <Panel /> : isYouth ? <Youth /> : <Landing />}</StrictMode>,
+  <StrictMode>{isPanel ? <Panel /> : isYouth ? <Youth /> : isRegister ? <Register /> : <Landing />}</StrictMode>,
 )
