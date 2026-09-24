@@ -3,6 +3,7 @@ package admin
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/pmarkun/teendns/internal/config"
 	"github.com/pmarkun/teendns/internal/gateway"
+	"github.com/pmarkun/teendns/internal/mail"
 	"github.com/pmarkun/teendns/internal/pairing"
 	"github.com/pmarkun/teendns/internal/policy"
 )
@@ -28,7 +30,7 @@ func TestUpdateProfilePersistsAndActivatesImmediately(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server, err := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), "dns.teendns.test", "secret")
+	server, err := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), "dns.teendns.test", "secret", testMailer())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +68,7 @@ func TestCreateProfileGeneratesOpaqueEndpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	manager, _ := policy.NewManager(cfg.Profiles)
-	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), "dns.teendns.test", "secret")
+	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), "dns.teendns.test", "secret", testMailer())
 
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/profiles", bytes.NewBufferString(`{"label":"Estudos"}`))
 	request.Header.Set("Authorization", "Bearer secret")
@@ -88,15 +90,20 @@ func TestCreateProfileGeneratesOpaqueEndpoint(t *testing.T) {
 }
 
 func TestRegisterHouseConsumesInvitationAndScopesAdminToken(t *testing.T) {
-	t.Setenv("TEENDNS_INVITATION_CODES", "convite-unico")
 	t.Setenv("TEENDNS_CATALOG_DIR", filepath.Join("..", "..", "catalog", "v1"))
 	cfg := testConfig()
+	cfg.Invitations = []config.Invitation{{
+		CodeHash:  tokenHash("convite-unico"),
+		Email:     "responsavel@example.com",
+		CreatedAt: time.Now(),
+		ExpiresAt: time.Now().Add(7 * 24 * time.Hour),
+	}}
 	path := filepath.Join(t.TempDir(), "gateway.json")
 	if err := config.WriteAtomic(path, cfg, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	manager, _ := policy.NewManager(cfg.Profiles)
-	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), "dns.teendns.test", "operator-secret")
+	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), "dns.teendns.test", "operator-secret", testMailer())
 
 	register := func() *httptest.ResponseRecorder {
 		body := bytes.NewBufferString(`{"invitation_code":"convite-unico","house_name":"Casa Silva","profile_name":"Lia","preset":"explorando"}`)
@@ -119,6 +126,14 @@ func TestRegisterHouseConsumesInvitationAndScopesAdminToken(t *testing.T) {
 	}
 	if len(created.Profile.Groups) != 15 || groupAction(created.Profile.Groups, "service-instagram") != policy.ActionObserve {
 		t.Fatalf("expected exploring preset groups, got %+v", created.Profile.Groups)
+	}
+
+	snapshot := server.Snapshot()
+	if len(snapshot.Houses) != 1 || snapshot.Houses[0].Email != "responsavel@example.com" {
+		t.Fatalf("expected invitation email copied to house, got %+v", snapshot.Houses)
+	}
+	if len(snapshot.Invitations) != 1 || snapshot.Invitations[0].Email != "" || snapshot.Invitations[0].UsedAt == nil {
+		t.Fatalf("expected invitation redacted and marked used, got %+v", snapshot.Invitations)
 	}
 
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/profiles", nil)
@@ -148,6 +163,135 @@ func TestRegisterHouseConsumesInvitationAndScopesAdminToken(t *testing.T) {
 	reused := register()
 	if reused.Code != http.StatusForbidden {
 		t.Fatalf("expected reused invitation to fail, got %d: %s", reused.Code, reused.Body.String())
+	}
+}
+
+func TestRegisterHouseRejectsExpiredInvitation(t *testing.T) {
+	t.Setenv("TEENDNS_CATALOG_DIR", filepath.Join("..", "..", "catalog", "v1"))
+	cfg := testConfig()
+	cfg.Invitations = []config.Invitation{{
+		CodeHash:  tokenHash("convite-vencido"),
+		Email:     "responsavel@example.com",
+		CreatedAt: time.Now().Add(-8 * 24 * time.Hour),
+		ExpiresAt: time.Now().Add(-1 * time.Hour),
+	}}
+	path := filepath.Join(t.TempDir(), "gateway.json")
+	if err := config.WriteAtomic(path, cfg, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager, _ := policy.NewManager(cfg.Profiles)
+	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), "dns.teendns.test", "operator-secret", testMailer())
+
+	body := bytes.NewBufferString(`{"invitation_code":"convite-vencido","house_name":"Casa Silva","profile_name":"Lia","preset":"explorando"}`)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/houses", body)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("expected expired invitation to be rejected with 403, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
+type recordingMailer struct {
+	sent []struct{ to, subject, html string }
+	fail bool
+}
+
+func (m *recordingMailer) Send(to, subject, html string) error {
+	if m.fail {
+		return errors.New("send failed")
+	}
+	m.sent = append(m.sent, struct{ to, subject, html string }{to, subject, html})
+	return nil
+}
+
+func TestCreateInvitationRequiresOperatorToken(t *testing.T) {
+	cfg := testConfig()
+	path := filepath.Join(t.TempDir(), "gateway.json")
+	if err := config.WriteAtomic(path, cfg, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager, _ := policy.NewManager(cfg.Profiles)
+	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), "dns.teendns.test", "operator-secret", testMailer())
+
+	houseToken, err := randomToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := server.update(func(cfg *config.Config) error {
+		cfg.Houses = append(cfg.Houses, config.House{ID: "house-1", Name: "Casa", AdminTokenHash: tokenHash(houseToken)})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	body := bytes.NewBufferString(`{"email":"responsavel@example.com"}`)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/invitations", body)
+	request.Header.Set("Authorization", "Bearer "+houseToken)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("expected house token to be rejected with 403, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestCreateInvitationSendsEmailAndPersistsRecord(t *testing.T) {
+	cfg := testConfig()
+	path := filepath.Join(t.TempDir(), "gateway.json")
+	if err := config.WriteAtomic(path, cfg, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager, _ := policy.NewManager(cfg.Profiles)
+	mailer := &recordingMailer{}
+	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), "dns.teendns.test", "operator-secret", mailer)
+
+	body := bytes.NewBufferString(`{"email":"responsavel@example.com"}`)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/invitations", body)
+	request.Header.Set("Authorization", "Bearer operator-secret")
+	request.Host = "teendns.lab.markun.com.br"
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", response.Code, response.Body.String())
+	}
+	var created invitationResponse
+	if err := json.NewDecoder(response.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	if created.Email != "responsavel@example.com" || created.Code == "" || !created.EmailSent {
+		t.Fatalf("unexpected invitation response: %+v", created)
+	}
+	if created.Link != "https://teendns.lab.markun.com.br/comecar?convite="+created.Code {
+		t.Fatalf("unexpected invitation link: %q", created.Link)
+	}
+	if len(mailer.sent) != 1 || mailer.sent[0].to != "responsavel@example.com" {
+		t.Fatalf("expected exactly one email sent to the invited address, got %+v", mailer.sent)
+	}
+
+	snapshot := server.Snapshot()
+	if len(snapshot.Invitations) != 1 || snapshot.Invitations[0].UsedAt != nil {
+		t.Fatalf("expected one unused invitation persisted, got %+v", snapshot.Invitations)
+	}
+	if snapshot.Invitations[0].CodeHash != tokenHash(created.Code) {
+		t.Fatal("persisted invitation hash does not match issued code")
+	}
+}
+
+func TestCreateInvitationRejectsInvalidEmail(t *testing.T) {
+	cfg := testConfig()
+	path := filepath.Join(t.TempDir(), "gateway.json")
+	if err := config.WriteAtomic(path, cfg, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager, _ := policy.NewManager(cfg.Profiles)
+	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), "dns.teendns.test", "operator-secret", testMailer())
+
+	body := bytes.NewBufferString(`{"email":"not-an-email"}`)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/invitations", body)
+	request.Header.Set("Authorization", "Bearer operator-secret")
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid email, got %d: %s", response.Code, response.Body.String())
 	}
 }
 
@@ -185,7 +329,7 @@ func TestCatalogPackagesListsReadyMadeGroups(t *testing.T) {
 		t.Fatal(err)
 	}
 	manager, _ := policy.NewManager(cfg.Profiles)
-	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), "dns.teendns.test", "secret")
+	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), "dns.teendns.test", "secret", testMailer())
 
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/catalog/packages", nil)
 	request.Header.Set("Authorization", "Bearer secret")
@@ -217,7 +361,7 @@ func TestProfilePackageCanBeEnabledAndDisabledImmediately(t *testing.T) {
 		t.Fatal(err)
 	}
 	manager, _ := policy.NewManager(cfg.Profiles)
-	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), "dns.teendns.test", "secret")
+	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), "dns.teendns.test", "secret", testMailer())
 
 	put := func(body string) policy.Profile {
 		request := httptest.NewRequest(http.MethodPut, "/api/v1/profiles/home/packages/service-instagram", bytes.NewBufferString(body))
@@ -274,7 +418,7 @@ func TestAdminRequiresBearerToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	manager, _ := policy.NewManager(cfg.Profiles)
-	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), "dns.teendns.test", "secret")
+	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), "dns.teendns.test", "secret", testMailer())
 	response := httptest.NewRecorder()
 	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/profiles", nil))
 	if response.Code != http.StatusUnauthorized {
@@ -351,7 +495,7 @@ func TestPairingSessionReturnsOnlyProtectedCategoryNamesAndReasons(t *testing.T)
 	}
 	manager, _ := policy.NewManager(cfg.Profiles)
 	pairings := testPairing()
-	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), pairings, "dns.teendns.test", "secret")
+	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), pairings, "dns.teendns.test", "secret", testMailer())
 
 	create := httptest.NewRequest(http.MethodPost, "/api/v1/pairing/challenges", nil)
 	created := httptest.NewRecorder()
@@ -393,6 +537,13 @@ func TestPairingSessionReturnsOnlyProtectedCategoryNamesAndReasons(t *testing.T)
 
 func testPairing() *pairing.Manager {
 	return pairing.NewManager("pair.teendns.test", time.Minute, time.Hour)
+}
+
+// testMailer returns a Sender in log-only mode: no network call, no
+// credential required, safe for every test that does not assert on the
+// email itself.
+func testMailer() mail.Sender {
+	return mail.NewResendClient("", "")
 }
 
 func testConfig() config.Config {
