@@ -15,6 +15,19 @@ O registro `*.dns.lab.markun.com.br` aponta para a VPS. Cada perfil criado no
 painel recebe um hostname próprio sob esse wildcard, mas todos chegam ao mesmo
 gateway. O SNI da conexão TLS seleciona a política correta.
 
+## Branch de release
+
+`main` recebe o trabalho integrado. A branch protegida `production` contém o
+único código elegível para deploy nesta VPS. Ela não aceita push direto,
+force-push ou exclusão; uma promoção acontece por Pull Request de `main` para
+`production`.
+
+O deploy usa o SHA exato de `origin/production` e o grava em
+`/opt/teendns/DEPLOYED_REVISION`. Ao final de cada publicação, os dois valores
+devem coincidir. Durante os poucos minutos de uma publicação, `production` pode
+estar à frente do serviço vivo; falha de deploy deve ser tratada antes de outra
+promoção.
+
 ## Isolamento na VPS
 
 | Item | Valor |
@@ -60,10 +73,13 @@ delegada em provedor que aceite subzonas.
 
 ## Atualização
 
-1. Validar e commitar localmente.
-2. Copiar somente os arquivos rastreados para `/opt/teendns/app`.
-3. Recriar o projeto `teendns` com `up -d --build`.
-4. Verificar `/healthz`, uma resolução permitida, um bloqueio e o pareamento.
+1. Validar e integrar a mudança em `main`.
+2. Abrir e fazer merge de um PR `main -> production`.
+3. Resolver localmente o SHA de `origin/production` e copiar somente seus
+   arquivos rastreados para `/opt/teendns/app`.
+4. Recriar o projeto `teendns` com `up -d --build`.
+5. Gravar o SHA em `/opt/teendns/DEPLOYED_REVISION`.
+6. Verificar `/healthz`, containers, uma resolução permitida e um bloqueio.
 
 O arquivo `/opt/teendns/runtime/gateway.json` é estado do staging. Não deve ser
 substituído durante atualizações, pois contém os perfis e regras editados em
