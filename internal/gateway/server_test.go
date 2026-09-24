@@ -56,6 +56,46 @@ func TestBlockedAliasEvaluatesCNAMETarget(t *testing.T) {
 	}
 }
 
+type recordingSink struct {
+	events []Event
+}
+
+func (s *recordingSink) Write(event Event) {
+	s.events = append(s.events, event)
+}
+
+func TestResolveRecordsReasonAndGroupNameOnBlock(t *testing.T) {
+	profile := policy.Profile{
+		ID:            "home",
+		DefaultAction: policy.ActionAllow,
+		Version:       7,
+		Groups: []policy.RuleGroup{{
+			ID:       "gambling",
+			Name:     "Apostas",
+			Action:   policy.ActionBlock,
+			Category: "gambling",
+			Reason:   "Apostas usam dinheiro real",
+			Domains:  []string{"bet.test"},
+		}},
+	}
+	sink := &recordingSink{}
+	server := NewServer("", nil, nil, "", 300, sink, nil)
+	request := new(dns.Msg)
+	request.SetQuestion("bet.test.", dns.TypeA)
+
+	response := server.resolve(profile, request)
+	if response.Rcode != dns.RcodeNameError {
+		t.Fatalf("expected NXDOMAIN, got %s", dns.RcodeToString[response.Rcode])
+	}
+	if len(sink.events) != 1 {
+		t.Fatalf("expected exactly one recorded event, got %d", len(sink.events))
+	}
+	event := sink.events[0]
+	if event.Reason != "Apostas usam dinheiro real" || event.MatchedDomain != "bet.test" || event.GroupName != "Apostas" {
+		t.Fatalf("unexpected event: %+v", event)
+	}
+}
+
 type pairingStub struct {
 	profileID string
 	queryName string
