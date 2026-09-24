@@ -39,6 +39,7 @@ services:
     environment:
       TEENDNS_ADMIN_TOKEN: ${TEENDNS_ADMIN_TOKEN:?set TEENDNS_ADMIN_TOKEN in .env}
       TEENDNS_INVITATION_CODES: ${TEENDNS_INVITATION_CODES:-}
+      TEENDNS_CATALOG_DIR: /catalog/v1
     user: "1000:1000"
     volumes:
       - ${TEENDNS_RUNTIME_DIR:-./runtime}:/runtime

@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -34,6 +35,7 @@ type Server struct {
 	hostnameSuffix string
 	token          string
 	invitationKeys []string
+	catalogDir     string
 }
 
 type accessScope struct {
@@ -54,6 +56,7 @@ type registrationRequest struct {
 	InvitationCode string `json:"invitation_code"`
 	HouseName      string `json:"house_name"`
 	ProfileName    string `json:"profile_name"`
+	Preset         string `json:"preset"`
 }
 
 type registrationResponse struct {
@@ -96,6 +99,7 @@ func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, e
 		hostnameSuffix: strings.TrimSuffix(strings.ToLower(hostnameSuffix), "."),
 		token:          token,
 		invitationKeys: splitInvitationKeys(os.Getenv("TEENDNS_INVITATION_CODES")),
+		catalogDir:     environmentOrDefault("TEENDNS_CATALOG_DIR", "catalog/v1"),
 	}, nil
 }
 
@@ -158,6 +162,11 @@ func (s *Server) registerHouse(writer http.ResponseWriter, request *http.Request
 		return
 	}
 	house := config.House{ID: houseIDToken[:12], Name: input.HouseName, AdminTokenHash: tokenHash(houseToken)}
+	groups, err := presetGroups(input.Preset, s.catalogDir)
+	if err != nil {
+		writeError(writer, http.StatusBadRequest, err)
+		return
+	}
 	profile := policy.Profile{
 		ID:            profileToken[:12],
 		HouseID:       house.ID,
@@ -166,7 +175,7 @@ func (s *Server) registerHouse(writer http.ResponseWriter, request *http.Request
 		DefaultAction: policy.ActionAllow,
 		Version:       1,
 		Rules:         []policy.Rule{},
-		Groups:        []policy.RuleGroup{},
+		Groups:        groups,
 	}
 	err = s.update(func(cfg *config.Config) error {
 		if slices.Contains(cfg.UsedInvitationKeys, invitationKey) {
@@ -545,6 +554,58 @@ func constantTimeEqual(left, right string) bool {
 func tokenHash(value string) string {
 	sum := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(sum[:])
+}
+
+func environmentOrDefault(name, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+		return value
+	}
+	return fallback
+}
+
+type presetDefinition struct {
+	id             string
+	socialAction   policy.Action
+	adultAction    policy.Action
+	gamblingAction policy.Action
+}
+
+func presetGroups(id, catalogDir string) ([]policy.RuleGroup, error) {
+	if id == "" {
+		id = "exploring"
+	}
+	presets := map[string]presetDefinition{
+		"accompanied": {id: "accompanied", socialAction: policy.ActionBlock, adultAction: policy.ActionBlock, gamblingAction: policy.ActionBlock},
+		"exploring":   {id: "exploring", socialAction: policy.ActionObserve, adultAction: policy.ActionBlock, gamblingAction: policy.ActionBlock},
+		"guided":      {id: "guided", socialAction: policy.ActionObserve, adultAction: policy.ActionObserve, gamblingAction: policy.ActionBlock},
+	}
+	preset, ok := presets[id]
+	if !ok {
+		return nil, errors.New("preset desconhecido")
+	}
+	type groupSeed struct {
+		id, name, category, reason, file string
+		action                           policy.Action
+	}
+	seeds := []groupSeed{
+		{id: "gambling-br", name: "Apostas", category: "gambling", reason: "Apostas usam dinheiro real e podem criar hábitos difíceis de controlar", file: "gambling-br-authorized.txt", action: preset.gamblingAction},
+		{id: "adult", name: "Conteúdo adulto", category: "adult", reason: "Conteúdo sexual explícito pede contexto, conversa e um acordo adequado para esta fase", file: "adult-content-regulators.txt", action: preset.adultAction},
+		{id: "social", name: "Redes sociais", category: "social", reason: "Redes sociais misturam convivência, entretenimento, publicidade e pressão por atenção", file: "social-platforms.txt", action: preset.socialAction},
+	}
+	groups := make([]policy.RuleGroup, 0, len(seeds))
+	for _, seed := range seeds {
+		path := filepath.Join(catalogDir, seed.file)
+		domains, err := config.LoadDomains(path)
+		if err != nil {
+			return nil, fmt.Errorf("carregar preset %q: %w", preset.id, err)
+		}
+		groups = append(groups, policy.RuleGroup{
+			ID: seed.id, Name: seed.name, Action: seed.action, Category: seed.category,
+			Reason: seed.reason, Domains: append([]string{}, domains...),
+			DefaultDomains: append([]string{}, domains...), DomainSource: path,
+		})
+	}
+	return groups, nil
 }
 
 func withCORS(next http.Handler) http.Handler {

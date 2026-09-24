@@ -88,6 +88,7 @@ func TestCreateProfileGeneratesOpaqueEndpoint(t *testing.T) {
 
 func TestRegisterHouseConsumesInvitationAndScopesAdminToken(t *testing.T) {
 	t.Setenv("TEENDNS_INVITATION_CODES", "convite-unico")
+	t.Setenv("TEENDNS_CATALOG_DIR", filepath.Join("..", "..", "catalog", "v1"))
 	cfg := testConfig()
 	path := filepath.Join(t.TempDir(), "gateway.json")
 	if err := config.WriteAtomic(path, cfg, 0o600); err != nil {
@@ -97,7 +98,7 @@ func TestRegisterHouseConsumesInvitationAndScopesAdminToken(t *testing.T) {
 	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), "dns.teendns.test", "operator-secret")
 
 	register := func() *httptest.ResponseRecorder {
-		body := bytes.NewBufferString(`{"invitation_code":"convite-unico","house_name":"Casa Silva","profile_name":"Lia"}`)
+		body := bytes.NewBufferString(`{"invitation_code":"convite-unico","house_name":"Casa Silva","profile_name":"Lia","preset":"exploring"}`)
 		request := httptest.NewRequest(http.MethodPost, "/api/v1/houses", body)
 		response := httptest.NewRecorder()
 		server.Handler().ServeHTTP(response, request)
@@ -114,6 +115,9 @@ func TestRegisterHouseConsumesInvitationAndScopesAdminToken(t *testing.T) {
 	}
 	if created.House.Name != "Casa Silva" || created.AdminToken == "" || created.Profile.HouseID != created.House.ID {
 		t.Fatalf("unexpected registration: %+v", created)
+	}
+	if len(created.Profile.Groups) != 3 || created.Profile.Groups[2].Action != policy.ActionObserve {
+		t.Fatalf("expected exploring preset groups, got %+v", created.Profile.Groups)
 	}
 
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/profiles", nil)
@@ -143,6 +147,32 @@ func TestRegisterHouseConsumesInvitationAndScopesAdminToken(t *testing.T) {
 	reused := register()
 	if reused.Code != http.StatusForbidden {
 		t.Fatalf("expected reused invitation to fail, got %d: %s", reused.Code, reused.Body.String())
+	}
+}
+
+func TestPresetGroupsChooseActionsWithoutStoringAge(t *testing.T) {
+	catalogDir := filepath.Join("..", "..", "catalog", "v1")
+	tests := []struct {
+		id            string
+		adult, social policy.Action
+	}{
+		{id: "accompanied", adult: policy.ActionBlock, social: policy.ActionBlock},
+		{id: "exploring", adult: policy.ActionBlock, social: policy.ActionObserve},
+		{id: "guided", adult: policy.ActionObserve, social: policy.ActionObserve},
+	}
+	for _, test := range tests {
+		t.Run(test.id, func(t *testing.T) {
+			groups, err := presetGroups(test.id, catalogDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(groups) != 3 || groups[0].Action != policy.ActionBlock || groups[1].Action != test.adult || groups[2].Action != test.social {
+				t.Fatalf("unexpected preset: %+v", groups)
+			}
+		})
+	}
+	if _, err := presetGroups("inventado", catalogDir); err == nil {
+		t.Fatal("expected unknown preset error")
 	}
 }
 

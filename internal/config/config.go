@@ -100,3 +100,10 @@ func loadDomains(path string) ([]string, error) {
 	}
 	return domains, nil
 }
+
+// LoadDomains reads one normalized catalog file for provisioning code. Runtime
+// config loading uses the same parser so presets and persisted profiles cannot
+// disagree about comments, duplicates or casing.
+func LoadDomains(path string) ([]string, error) {
+	return loadDomains(path)
+}
