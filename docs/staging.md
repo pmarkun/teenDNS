@@ -35,7 +35,7 @@ promoção.
 | Código implantado | `/opt/teendns/app` |
 | Estado gravável | `/opt/teendns/runtime` |
 | Segredo administrativo | `/opt/teendns/.env` (`0600`) |
-| Convites disponíveis | `TEENDNS_INVITATION_CODES` em `/opt/teendns/.env` |
+| E-mail transacional | `RESEND_API_KEY` e `TEENDNS_MAIL_FROM` em `/opt/teendns/.env` |
 | Projeto Compose | `teendns` |
 | Rede Docker | `10.78.53.0/24` |
 | Web local para o Caddy | `127.0.0.1:18182` |
@@ -87,14 +87,37 @@ tempo real pelo painel.
 
 ## Convites e casas
 
-Os códigos são aleatórios, ficam apenas no `.env` e são separados por vírgula.
-Quando um código é usado, somente seu hash é gravado no estado do gateway; por
-isso ele não pode cadastrar uma segunda casa. O cadastro mostra a chave da casa
-uma única vez. O servidor guarda apenas o hash dessa chave e limita com ela
-todas as leituras e alterações aos perfis da casa correspondente.
+O operador gera um convite pelo painel em `/convidar` (autenticado com o
+`TEENDNS_ADMIN_TOKEN` global), informando o e-mail do responsável. O gateway
+cria um código de uso único válido por 7 dias, grava apenas o hash desse
+código no estado (`gateway.json`), e envia por e-mail via Resend um link para
+`/comecar?convite=<código>` com o código pré-preenchido. Se o envio falhar, a
+resposta da API ainda inclui o link para o operador copiar manualmente — o
+convite já foi criado e continua válido.
+
+Ao consumir o convite, o e-mail informado é copiado para o campo `email` da
+casa (usado depois pelo digest semanal) e apagado do registro do próprio
+convite, que passa a guardar só o hash e a data de uso. O cadastro mostra a
+chave da casa uma única vez; o servidor guarda apenas o hash dessa chave e
+limita com ela todas as leituras e alterações aos perfis da casa
+correspondente.
 
 O `TEENDNS_ADMIN_TOKEN` continua sendo uma credencial operacional global do
 staging. Ele não deve ser entregue a famílias.
+
+## Digest semanal por e-mail
+
+Toda casa com e-mail cadastrado (via convite) recebe, uma vez por semana, um
+resumo dos domínios observados (ação `Observar`, nunca `Bloquear`) por
+perfil, agregados por período do dia — manhã, tarde ou noite, nunca horário
+exato nem sequência de navegação. O acumulado fica em
+`/opt/teendns/runtime/observations.json`, separado do `gateway.json`, e é
+apagado a cada envio bem-sucedido. Ver a política de retenção completa em
+[ameacas-e-limites.md](ameacas-e-limites.md).
+
+O envio depende de `RESEND_API_KEY`/`TEENDNS_MAIL_FROM` reais em
+`/opt/teendns/.env`; sem eles o Compose recusa subir (`:?` obrigatório, mesmo
+padrão do `TEENDNS_ADMIN_TOKEN`).
 
 ## Verificações do primeiro deploy
 

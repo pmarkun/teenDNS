@@ -52,6 +52,7 @@ type Decision struct {
 	Category      string
 	Reason        string
 	MatchedDomain string
+	GroupName     string
 	PolicyVersion int64
 }
 
@@ -197,6 +198,7 @@ func Decide(profile Profile, queryName string) (Decision, error) {
 			decision.Category = group.Category
 			decision.Reason = group.Reason
 			decision.MatchedDomain = domain
+			decision.GroupName = group.Name
 		}
 	}
 

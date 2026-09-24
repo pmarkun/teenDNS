@@ -9,16 +9,21 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/pmarkun/teendns/internal/admin"
 	"github.com/pmarkun/teendns/internal/config"
+	"github.com/pmarkun/teendns/internal/digest"
 	"github.com/pmarkun/teendns/internal/fixture"
 	"github.com/pmarkun/teendns/internal/gateway"
+	"github.com/pmarkun/teendns/internal/mail"
 	"github.com/pmarkun/teendns/internal/pairing"
 	"github.com/pmarkun/teendns/internal/policy"
 )
+
+const digestInterval = 7 * 24 * time.Hour
 
 func main() {
 	if len(os.Args) < 2 {
@@ -62,6 +67,11 @@ func runGateway(arguments []string) {
 	signal.Notify(reload, syscall.SIGHUP)
 	defer signal.Stop(reload)
 	eventBuffer := gateway.NewEventBuffer()
+	digestStore, err := digest.NewStore(filepath.Join(filepath.Dir(*configPath), "observations.json"))
+	if err != nil {
+		log.Fatalf("configure digest store: %v", err)
+	}
+	mailSender := mail.NewResendClient(os.Getenv("RESEND_API_KEY"), os.Getenv("TEENDNS_MAIL_FROM"))
 	pairingManager := pairing.NewManager(*pairingSuffix, 2*time.Minute, time.Hour)
 	server := gateway.NewServer(
 		cfg.Listen,
@@ -69,13 +79,15 @@ func runGateway(arguments []string) {
 		profiles,
 		cfg.Upstream,
 		cfg.MaxTTL,
-		gateway.MultiEventSink{gateway.NewEventWriter(os.Stdout), eventBuffer},
+		gateway.MultiEventSink{gateway.NewEventWriter(os.Stdout), eventBuffer, digestStore},
 		pairingManager,
 	)
-	adminAPI, err := admin.NewServer(*configPath, cfg, profiles, eventBuffer, pairingManager, *hostnameSuffix, os.Getenv("TEENDNS_ADMIN_TOKEN"))
+	adminAPI, err := admin.NewServer(*configPath, cfg, profiles, eventBuffer, pairingManager, *hostnameSuffix, os.Getenv("TEENDNS_ADMIN_TOKEN"), mailSender)
 	if err != nil {
 		log.Fatalf("configure admin API: %v", err)
 	}
+	digestScheduler := &digest.Scheduler{Store: digestStore, Sender: mailSender, Config: adminAPI, Interval: digestInterval}
+	go digestScheduler.Run(ctx, time.Hour)
 	go func() {
 		for range reload {
 			updated, err := config.Load(*configPath)

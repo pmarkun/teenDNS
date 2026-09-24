@@ -44,6 +44,26 @@ func TestDecideMatchesDomainInsideRuleGroup(t *testing.T) {
 	if err != nil || decision.Action != ActionBlock || decision.Category != "gambling" {
 		t.Fatalf("unexpected decision: %+v, %v", decision, err)
 	}
+	if decision.GroupName != "Apostas" {
+		t.Fatalf("expected group name %q, got %q", "Apostas", decision.GroupName)
+	}
+}
+
+func TestDecideLeavesGroupNameEmptyForRuleMatch(t *testing.T) {
+	profile := Profile{
+		DefaultAction: ActionAllow,
+		Rules: []Rule{
+			{Domain: "blocked.test", Action: ActionBlock, Category: "demo"},
+		},
+	}
+
+	decision, err := Decide(profile, "blocked.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.GroupName != "" {
+		t.Fatalf("expected empty group name for rule match, got %q", decision.GroupName)
+	}
 }
 
 func TestDecideDoesNotMatchDeceptiveSuffix(t *testing.T) {

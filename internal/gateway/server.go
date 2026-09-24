@@ -24,6 +24,9 @@ type Event struct {
 	QueryType     uint16        `json:"query_type"`
 	Action        policy.Action `json:"action"`
 	Category      string        `json:"category,omitempty"`
+	Reason        string        `json:"reason,omitempty"`
+	MatchedDomain string        `json:"matched_domain,omitempty"`
+	GroupName     string        `json:"group_name,omitempty"`
 	PolicyVersion int64         `json:"policy_version"`
 }
 
@@ -160,6 +163,9 @@ func (s *Server) resolve(profile policy.Profile, request *dns.Msg) *dns.Msg {
 		QueryType:     question.Qtype,
 		Action:        decision.Action,
 		Category:      decision.Category,
+		Reason:        decision.Reason,
+		MatchedDomain: decision.MatchedDomain,
+		GroupName:     decision.GroupName,
 		PolicyVersion: decision.PolicyVersion,
 	}
 
