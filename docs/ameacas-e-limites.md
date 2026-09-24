@@ -2,16 +2,24 @@
 
 Este documento registra limites que não devem ser escondidos no produto ou no piloto.
 
-## O hostname identifica o perfil, mas não autentica fortemente o aparelho
+## O pareamento identifica o perfil, mas não autentica a pessoa
 
 No Android sem aplicativo, o único identificador disponível ao teenDNS é o hostname configurado como provedor de DNS privado. O gateway o recebe como SNI da conexão TLS.
 
 O identificador deve ser longo, aleatório, revogável e não conter nome ou outro dado pessoal. Ainda assim, o SNI do DNS-over-TLS pode ser observado pela rede antes de o canal TLS ser estabelecido. Quem copiar o hostname pode consultar usando a política daquele perfil e poluir suas estatísticas.
 
+O pareamento da visão jovem prova apenas que uma consulta de desafio passou por
+aquele endpoint DNS naquele momento. Ele usa identificadores aleatórios
+separados para a consulta DNS e para a leitura do resultado, aceita o desafio
+uma única vez e cria uma sessão de leitura com duração de uma hora.
+
 Portanto, no MVP:
 
 - o hostname é uma credencial de baixa garantia;
-- não autoriza acesso ao painel, pedidos ou dados pessoais;
+- não autoriza acesso ao painel administrativo, alterações, pedidos ou dados
+  pessoais;
+- autoriza somente a leitura dos nomes e motivos das categorias protegidas;
+- identifica o perfil compartilhado, não quem está segurando o aparelho;
 - pode ser regenerado sem recriar o perfil;
 - eventos devem ser agregados e ter retenção curta;
 - o painel usa autenticação separada;

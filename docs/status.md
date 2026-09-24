@@ -9,7 +9,7 @@ Atualizado em 23 de setembro de 2026. Branch: `codex/admin-web`.
 | M1 — DNS no laboratório | Concluído | Consulta DNS-over-TLS atravessa gateway e Unbound e recebe resposta determinística da fixture |
 | M2 — Mini-DNS por perfil | Concluído | Ana bloqueia `blocked.test`; Bia resolve o mesmo domínio pelo mesmo IP e porta |
 | M3 — Cache seguro | Concluído | Dois perfis usam uma consulta upstream; TTL é limitado; política recarrega atomicamente; CNAME não contorna bloqueio |
-| M4 — Autoprovisionamento | Concluído no laboratório | Painel cria perfis, edita regras, gira endpoints e ativa mudanças sem reiniciar o DNS |
+| M4 — Autoprovisionamento | Concluído no laboratório | Painel cria perfis, edita regras, gira endpoints e ativa mudanças sem reiniciar o DNS; visão jovem pareia pelo DNS |
 | M5 — Camada educativa | Em andamento | Página pública e linguagem visual concluídas; pedido e contestação ainda pendentes |
 | M6 — Aparelho real | Pendente | Requer domínio, certificado público e staging na porta 853 |
 | M7 — Piloto controlado | Pendente | Requer revisão de privacidade, autenticação e operação |
@@ -49,6 +49,8 @@ Casos confirmados:
 - alteração pelo painel aplicada ao DNS sem reiniciar o gateway;
 - grupos de regras aplicados pelo resolvedor, incluindo subdomínios;
 - restauração dos domínios padrão preservada pelo servidor;
+- desafio DNS de uso único convertido em sessão de leitura do perfil;
+- resposta jovem limitada a nomes e motivos dos grupos protegidos;
 - página pública e painel servidos pelo mesmo laboratório.
 
 ### Interface
@@ -62,6 +64,10 @@ Validação no navegador conectado:
   lista padrão;
 - criação com um domínio usando o próprio domínio como nome e criação com dois
   domínios exigindo um nome para o grupo;
+- pareamento completo da rota `/meu-dns` com o perfil `Casa`, incluindo os
+  estados de espera e sucesso;
+- visão jovem em desktop e Chromium emulado em `390 × 844`, sem domínios ou
+  histórico na resposta da API;
 - mudança de `blocked.test` de `Proteger` para `Permitir` produziu resposta
   `NOERROR`; a restauração para `Proteger` voltou a produzir `NXDOMAIN`.
 

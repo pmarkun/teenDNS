@@ -18,6 +18,7 @@ Documentação técnica:
 
 - página explicativa: `http://127.0.0.1:18082/`;
 - painel: `http://127.0.0.1:18082/painel`;
+- visão do adolescente: `http://127.0.0.1:18082/meu-dns`;
 - chave administrativa exclusiva do laboratório: `teendns-lab`.
 
 Alterações feitas no painel são validadas, gravadas em `.local/gateway.json` e

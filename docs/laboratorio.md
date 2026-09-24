@@ -42,7 +42,7 @@ Os dois endpoints chegam a `127.0.0.1:8853`. O cliente envia o endpoint como SNI
 - `unbound`: resolvedor e cache em `10.77.53.20:5353`;
 - `gateway`: DNS-over-TLS em `10.77.53.30:853`, publicado localmente como `127.0.0.1:8853`.
 - `gateway` API: HTTP em `127.0.0.1:18081`;
-- `web`: página pública e painel em `http://127.0.0.1:18082`.
+- `web`: página pública, painel e visão do adolescente em `http://127.0.0.1:18082`.
 
 O painel usa a chave `teendns-lab`, que existe somente para o laboratório. A API
 aceita `Authorization: Bearer teendns-lab`. Não reutilize essa chave fora do
@@ -99,3 +99,19 @@ O sinal `SIGHUP` continua disponível para testes e operação manual.
 O gateway mantém um snapshot imutável das políticas em memória. Ao receber `SIGHUP`, valida a configuração completa e troca o snapshot de forma atômica. Se a nova configuração for inválida, mantém a última versão válida.
 
 No laboratório, `lab-up.sh` copia a configuração base para `.local/gateway.json`. Os testes alteram somente essa cópia ignorada pelo Git.
+
+## Pareamento pelo DNS
+
+A rota `http://127.0.0.1:18082/meu-dns` cria um desafio aleatório e tenta
+resolver um nome único sob `pair.teendns.test`. Quando essa consulta chega pelo
+endpoint DNS de um perfil, o gateway confirma o pareamento e entrega àquela aba
+uma sessão de leitura válida por uma hora.
+
+A resposta para o adolescente contém somente o nome do perfil e os nomes e
+motivos dos grupos em modo **Proteger**. Ela não contém hostnames de endpoint,
+domínios das regras, contagens ou histórico. O identificador consultado no DNS
+é diferente do identificador usado para acompanhar o desafio pela API.
+
+O navegador pode ignorar o DNS do sistema por causa de DoH próprio, VPN ou
+configuração incorreta. Nesses casos, a tela não autentica silenciosamente: o
+pareamento expira e orienta a conferir a configuração.
