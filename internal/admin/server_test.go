@@ -1018,9 +1018,15 @@ func TestPairingSessionReturnsOnlyProtectedCategoryNamesAndReasons(t *testing.T)
 	if err := config.WriteAtomic(path, cfg, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	manager, _ := policy.NewManager(cfg.Profiles)
+	manager, err := policy.NewManager(cfg.Profiles)
+	if err != nil {
+		t.Fatal(err)
+	}
 	pairings := testPairing()
-	server, _ := NewServer(path, cfg, manager, gateway.NewEventBuffer(), pairings, testMagicLinks(), testDigestPurger(), "dns.teendns.test", "secret", testMailer())
+	server, err := NewServer(path, cfg, manager, gateway.NewEventBuffer(), pairings, testMagicLinks(), testDigestPurger(), "dns.teendns.test", "secret", testMailer())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	create := httptest.NewRequest(http.MethodPost, "/api/v1/pairing/challenges", nil)
 	created := httptest.NewRecorder()
@@ -1064,15 +1070,172 @@ func testPairing() *pairing.Manager {
 	return pairing.NewManager("pair.teendns.test", time.Minute, time.Hour)
 }
 
+func TestExtensionPolicyReturnsReadOnlySnapshotForPairingSession(t *testing.T) {
+	cfg := testConfig()
+	cfg.Profiles[0].Label = "Casa"
+	cfg.Profiles[0].TimeZone = "America/Sao_Paulo"
+	cfg.Profiles[0].DefaultAction = policy.ActionBlock
+	cfg.Profiles[0].Version = 7
+	cfg.Profiles[0].Rules = []policy.Rule{
+		{Domain: "allow.example", Action: policy.ActionAllow, Category: "familia", Reason: "Permitido pela família"},
+	}
+	cfg.Profiles[0].Groups = []policy.RuleGroup{
+		{ID: "gambling", Name: "Apostas", Action: policy.ActionBlock, Category: "jogos", Reason: "Apostas envolvem dinheiro real", Domains: []string{"secret.bet"}, DefaultDomains: []string{"secret.bet"}, DomainSource: "catalog", Customized: true},
+		{ID: "social", Name: "Redes", Action: policy.ActionBlock, Category: "redes", Reason: "Pausa nas redes", Domains: []string{"social.test"}, Schedules: []policy.ScheduledAction{{Action: policy.ActionAllow, TimeWindow: policy.TimeWindow{ID: "w1", Label: "Fim de semana", Days: []int{0, 6}, Start: "08:00", End: "22:00"}}}},
+	}
+	cfg.Profiles[0].Pauses = []policy.TimeWindow{{ID: "p1", Label: "Estudos", Days: []int{0}, Start: "18:00", End: "20:00"}}
+	path := filepath.Join(t.TempDir(), "gateway.json")
+	if err := config.WriteAtomic(path, cfg, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := policy.NewManager(cfg.Profiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pairings := testPairing()
+	server, err := NewServer(path, cfg, manager, gateway.NewEventBuffer(), pairings, testMagicLinks(), testDigestPurger(), "dns.teendns.test", "secret", testMailer())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	create := httptest.NewRequest(http.MethodPost, "/api/v1/pairing/challenges", nil)
+	created := httptest.NewRecorder()
+	server.Handler().ServeHTTP(created, create)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", created.Code, created.Body.String())
+	}
+	var challenge pairing.Challenge
+	if err := json.NewDecoder(created.Body).Decode(&challenge); err != nil {
+		t.Fatal(err)
+	}
+	if !pairings.Observe("home", challenge.DNSName) {
+		t.Fatal("could not pair challenge")
+	}
+	statusResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(statusResponse, httptest.NewRequest(http.MethodGet, "/api/v1/pairing/challenges/"+challenge.ID, nil))
+	var status pairing.Status
+	if err := json.NewDecoder(statusResponse.Body).Decode(&status); err != nil {
+		t.Fatal(err)
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/extension/policy", nil)
+	request.Header.Set("Authorization", "Bearer "+status.SessionToken)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	for _, want := range []string{
+		`"label":"Casa"`,
+		`"fingerprint":"p-home"`,
+		`"default_action":"block"`,
+		`"version":7`,
+		`"time_zone":"America/Sao_Paulo"`,
+		`"domain":"allow.example"`,
+		`"name":"Apostas"`,
+		`"name":"Redes"`,
+		`"schedules"`,
+		`"secret.bet"`,
+		`"p1"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("extension policy missing %q: %s", want, body)
+		}
+	}
+	for _, hidden := range []string{"hostname", "house_id", "default_domains", "domain_source", "customized", "p-home.dns"} {
+		if strings.Contains(body, hidden) {
+			t.Fatalf("extension policy leaked %q: %s", hidden, body)
+		}
+	}
+}
+
+func TestExtensionPolicyRejectsInvalidSession(t *testing.T) {
+	cfg := testConfig()
+	path := filepath.Join(t.TempDir(), "gateway.json")
+	if err := config.WriteAtomic(path, cfg, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := policy.NewManager(cfg.Profiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), testMagicLinks(), testDigestPurger(), "dns.teendns.test", "secret", testMailer())
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/extension/policy", nil)
+	request.Header.Set("Authorization", "Bearer nope")
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestExtensionPolicyReturnsEmptyCollectionsAsArrays(t *testing.T) {
+	cfg := testConfig()
+	cfg.Profiles[0].Rules = nil
+	cfg.Profiles[0].Groups = nil
+	cfg.Profiles[0].Pauses = nil
+	path := filepath.Join(t.TempDir(), "gateway.json")
+	if err := config.WriteAtomic(path, cfg, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := policy.NewManager(cfg.Profiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pairings := testPairing()
+	server, err := NewServer(path, cfg, manager, gateway.NewEventBuffer(), pairings, testMagicLinks(), testDigestPurger(), "dns.teendns.test", "secret", testMailer())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	created := httptest.NewRecorder()
+	server.Handler().ServeHTTP(created, httptest.NewRequest(http.MethodPost, "/api/v1/pairing/challenges", nil))
+	if created.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", created.Code, created.Body.String())
+	}
+	var challenge pairing.Challenge
+	if err := json.NewDecoder(created.Body).Decode(&challenge); err != nil {
+		t.Fatal(err)
+	}
+	if !pairings.Observe("home", challenge.DNSName) {
+		t.Fatal("could not pair challenge")
+	}
+	statusResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(statusResponse, httptest.NewRequest(http.MethodGet, "/api/v1/pairing/challenges/"+challenge.ID, nil))
+	var status pairing.Status
+	if err := json.NewDecoder(statusResponse.Body).Decode(&status); err != nil {
+		t.Fatal(err)
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/extension/policy", nil)
+	request.Header.Set("Authorization", "Bearer "+status.SessionToken)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", response.Code, response.Body.String())
+	}
+	var snapshot extensionPolicyResponse
+	if err := json.NewDecoder(response.Body).Decode(&snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Rules == nil || snapshot.Groups == nil || snapshot.Pauses == nil {
+		t.Fatalf("empty collections must serialize as arrays, got rules=%#v groups=%#v pauses=%#v", snapshot.Rules, snapshot.Groups, snapshot.Pauses)
+	}
+}
+
+func testMagicLinks() *magiclink.Manager {
+	return magiclink.NewManager(time.Minute, time.Hour)
+}
+
 // testMailer returns a Sender in log-only mode: no network call, no
 // credential required, safe for every test that does not assert on the
 // email itself.
 func testMailer() mail.Sender {
 	return mail.NewResendClient("", "")
-}
-
-func testMagicLinks() *magiclink.Manager {
-	return magiclink.NewManager(time.Minute, time.Hour)
 }
 
 // noopDigestPurger satisfies DigestPurger for tests that never delete a
