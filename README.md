@@ -1,120 +1,71 @@
 # teenDNS
 
-Controle parental por DNS que protege sem virar vigilância. Cada casa recebe
-perfis independentes, escolhe pacotes de proteção e pode explicar os acordos
-para crianças e adolescentes em uma página pareada.
+**Cuidar da internet sem transformar cuidado em vigilância.**
 
-O MVP está ativo em <https://teendns.lab.markun.com.br>.
-O código elegível para publicação fica na branch protegida `production`;
-`main` continua sendo a branch de integração.
+O teenDNS é uma ferramenta para famílias combinarem limites de uso da internet
+sem depender dos controles isolados de cada aplicativo e sem ler mensagens ou
+páginas. As regras acompanham o perfil da pessoa, não um aparelho específico,
+e são aplicadas a domínios no momento em que o dispositivo os consulta.
 
-## Usar o staging
+## Por que existe
 
-- painel administrativo: <https://teendns.lab.markun.com.br/painel>;
-- cadastro por convite: <https://teendns.lab.markun.com.br/comecar>;
-- visão jovem pareada: <https://teendns.lab.markun.com.br/meu-dns>.
+Os controles parentais costumam estar espalhados entre plataformas, com
+configurações diferentes e pouca portabilidade. Uma regra definida em um
+aplicativo não acompanha a família para outro serviço ou aparelho. E ferramentas
+que prometem segurança podem acabar coletando muito mais informação do que a
+necessária.
 
-O painel mostra o hostname de DNS privado de cada perfil. No Android, ele pode
-ser informado em **Configurações > Rede e internet > DNS privado**, sem instalar
-aplicativo. Cada hostname seleciona uma política diferente no mesmo IP e porta
-DNS-over-TLS.
+O teenDNS propõe outro caminho: regras simples, definidas pela família e
+aplicadas fora de cada plataforma. A tecnologia ajuda a cumprir um acordo; não
+substitui conversa, confiança nem a autonomia de quem usa a rede.
 
-## Rodar localmente
+## Como a proposta funciona
 
-O projeto usa Nix, Go, React e Docker Compose:
+Cada pessoa tem um perfil, e os acordos da família acompanham esse perfil entre
+seus aparelhos, em vez de ficarem presos a um aplicativo. Para cada categoria, a
+família decide o que permitir, observar ou proteger.
 
-```bash
-./scripts/lab-up.sh
-```
+A observação serve para apoiar conversas, não para produzir uma lista completa
+da navegação. Uma página voltada a jovens explica quais acordos estão ativos e
+por quê, sem expor mensagens ou o conteúdo de páginas visitadas.
 
-O laboratório publica:
+Também é possível programar horários por grupo e pausas gerais para momentos
+como dormir ou fazer refeições.
 
-- site e painel: <http://127.0.0.1:18082>;
-- API administrativa: <http://127.0.0.1:18081>;
-- DNS-over-TLS: `127.0.0.1:8853`;
-- chave administrativa local: `teendns-lab`.
+O teenDNS não é uma ferramenta de espionagem nem promete controle total da vida
+digital. A proposta é apoiar limites proporcionais, compreensíveis e combinados
+em família. Os detalhes sobre como a tecnologia funciona e seus limites estão na
+[visão técnica](docs/visao-tecnica.md) e no documento de
+[ameaças e limites](docs/ameacas-e-limites.md).
 
-Valide o fluxo completo e encerre o laboratório com:
+## Origem: Hackathon Reflorestando a Rede
 
-```bash
-./scripts/lab-test.sh
-./scripts/lab-down.sh
-```
+O teenDNS foi desenvolvido pela equipe **Ônibus Hacker** durante a Hackathon do
+Festival Compartilhe — **Reflorestando a Rede**, realizada de 23 a 25 de setembro
+de 2026, em São Paulo, por ARTIGO 19 Brasil e América do Sul e pela Electronic
+Frontier Foundation (EFF).
 
-O estado local fica em `.local/`, fora do Git.
+A hackathon reuniu pessoas de diferentes áreas para criar ferramentas práticas
+em favor de uma internet mais livre, diversa e plural. O teenDNS dialoga com o
+eixo de concorrência e reversibilidade de configurações: demonstra como uma
+família pode definir e levar suas próprias regras entre plataformas, sem depender
+de cada empresa implementar um controle parental diferente.
 
-## O que já funciona
+## Protótipo
 
-- vários perfis DNS no mesmo endereço, identificados pelo SNI do DoT;
-- políticas `Permitir`, `Observar` e `Proteger`, aplicadas sem reiniciar;
-- cache recursivo compartilhado sem compartilhar decisões familiares;
-- painel responsivo com edição de regras e 15 pacotes prontos;
-- cadastro de casas por convite e isolamento por chave administrativa;
-- pareamento pelo DNS para uma visão jovem sem histórico de navegação;
-- catálogo versionado de apostas, conteúdo adulto e pools por serviço;
-- classificador experimental de páginas separado do caminho crítico do DNS.
-
-```text
-celular ou navegador
-        │ DNS-over-TLS + hostname do perfil
-        ▼
-gateway teenDNS ── política em memória ──► NXDOMAIN quando protegido
-        │
-        ▼
-     Unbound ──► internet
-
-painel web ──► API administrativa ──► estado persistido + troca atômica
-```
-
-## Estrutura
-
-| Caminho | Responsabilidade |
-| --- | --- |
-| `cmd/teendns` | gateway DoT, fixture local e API administrativa |
-| `internal/` | política, DNS, configuração, pareamento e painel |
-| `web/` | site público, painel, cadastro e visão jovem |
-| `catalog/v1/` | listas, presets, pools por serviço e proveniência |
-| `classifier/` | experimento de classificação de páginas |
-| `criteria/` | taxonomia etária e contratos do classificador |
-| `deploy/staging/` | Compose e configuração declarativa do staging |
-| `scripts/` | laboratório, carga e geração/validação de catálogo |
-| `docs/` | decisões, operação, limites e evidências de validação |
-
-## Validar mudanças
-
-```bash
-nix develop --command go test ./cmd/... ./internal/... ./classifier/...
-nix develop --command go vet ./cmd/... ./internal/... ./classifier/...
-nix develop --command go test -race ./cmd/... ./internal/... ./classifier/...
-uv run scripts/build-catalog-v1.py --check
-uv run scripts/validate-age-criteria.py
-cd web && npm run lint && npm run build
-```
-
-Mudanças de interface também devem ser verificadas em desktop e celular no
-navegador conectado. O Compose de staging exige um `.env` real e não deve ser
-validado inventando credenciais.
-
-## Limites importantes
-
-- DNS conhece domínios, não páginas, mensagens ou intenção.
-- HTTPS impede redirecionar universalmente um bloqueio para uma página própria.
-- Apps podem manter conexões/IPs em cache ou usar VPN e DNS próprio.
-- Pools de serviços evitam infraestrutura compartilhada; por isso são melhor
-  esforço e precisam de testes periódicos em aparelhos reais.
-- O staging ainda não possui recuperação de conta, PostgreSQL ou alta
-  disponibilidade.
+O staging público do MVP está em <https://teendns.lab.markun.com.br>. Ele pode
+estar em uma versão diferente do trabalho local em andamento.
 
 ## Documentação
 
-- [estado atual e evidências](docs/status.md);
-- [laboratório local](docs/laboratorio.md);
-- [operação do staging](docs/staging.md);
-- [ameaças e limites](docs/ameacas-e-limites.md);
-- [metodologia do catálogo](docs/metodologia-catalogo-v1.md);
-- [sistema visual](docs/design-system.md);
-- [plano técnico original](docs/plano-execucao.md);
-- [critérios de classificação etária](docs/criterios-classificacao-etaria.md);
-- [classificador experimental](docs/classifier-service.md).
+- [Visão técnica: arquitetura, execução local e validação](docs/visao-tecnica.md)
+- [Estado atual e evidências](docs/status.md)
+- [Ameaças, privacidade e limites](docs/ameacas-e-limites.md)
+- [Operação do staging](docs/staging.md)
+- [Metodologia do catálogo](docs/metodologia-catalogo-v1.md)
+- [Sistema visual](docs/design-system.md)
 
-As regras de trabalho do repositório estão em [AGENTS.md](AGENTS.md).
+## Licença
+
+O teenDNS está disponível sob a [Licença MIT](LICENSE). Os catálogos e outros
+materiais de terceiros mantêm as licenças e atribuições de suas fontes.

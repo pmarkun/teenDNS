@@ -8,6 +8,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Admin } from './pages/Admin'
 import { AuthCallback } from './pages/AuthCallback'
+import { Como } from './pages/Como'
 import { Landing } from './pages/Landing'
 import { Panel } from './pages/Panel'
 import { Register } from './pages/Register'
@@ -19,6 +20,7 @@ const isYouth = window.location.pathname.startsWith('/meu-dns')
 const isRegister = window.location.pathname.startsWith('/comecar')
 const isAdmin = window.location.pathname.startsWith('/admin')
 const isAuthCallback = window.location.pathname.startsWith('/entrar')
+const isComo = window.location.pathname === '/como' || window.location.pathname.startsWith('/como/')
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -27,6 +29,7 @@ createRoot(document.getElementById('root')!).render(
       : isRegister ? <Register />
       : isAdmin ? <Admin />
       : isAuthCallback ? <AuthCallback />
+      : isComo ? <Como />
       : <Landing />}
   </StrictMode>,
 )

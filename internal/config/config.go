@@ -27,6 +27,7 @@ type House struct {
 	ID             string   `json:"id"`
 	Name           string   `json:"name"`
 	AdminTokenHash string   `json:"admin_token_hash"`
+	TimeZone       string   `json:"time_zone,omitempty"`
 	Email          string   `json:"email,omitempty"`
 	Emails         []string `json:"emails,omitempty"`
 }
@@ -75,6 +76,9 @@ func Load(path string) (Config, error) {
 			house.Emails = []string{house.Email}
 		}
 	}
+	if err := ApplyHouseTimeZones(&cfg); err != nil {
+		return Config{}, err
+	}
 	for profileIndex := range cfg.Profiles {
 		for groupIndex := range cfg.Profiles[profileIndex].Groups {
 			group := &cfg.Profiles[profileIndex].Groups[groupIndex]
@@ -101,6 +105,31 @@ func Load(path string) (Config, error) {
 		return Config{}, fmt.Errorf("profiles: %w", err)
 	}
 	return cfg, nil
+}
+
+// ApplyHouseTimeZones gives each runtime profile its household time zone. The
+// profile field is intentionally transient; the persistent source of truth is
+// the owning house, so a house-level change applies consistently to all profiles.
+func ApplyHouseTimeZones(cfg *Config) error {
+	houseZones := make(map[string]string, len(cfg.Houses))
+	for index := range cfg.Houses {
+		house := &cfg.Houses[index]
+		if house.TimeZone == "" {
+			house.TimeZone = policy.DefaultTimeZone
+		}
+		if _, err := time.LoadLocation(house.TimeZone); err != nil {
+			return fmt.Errorf("house %q time zone: %w", house.ID, err)
+		}
+		houseZones[house.ID] = house.TimeZone
+	}
+	for index := range cfg.Profiles {
+		profile := &cfg.Profiles[index]
+		profile.TimeZone = policy.DefaultTimeZone
+		if zone, ok := houseZones[profile.HouseID]; ok {
+			profile.TimeZone = zone
+		}
+	}
+	return nil
 }
 
 func loadDomains(path string) ([]string, error) {
