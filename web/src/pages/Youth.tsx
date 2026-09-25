@@ -71,7 +71,7 @@ export function Youth() {
       <header className="youth-header">
         <Logo />
         <span>seu lado do combinado</span>
-        <a href="/#como">como funciona</a>
+        <a href="/como">como funciona</a>
       </header>
 
       {screen === 'pairing' && <PairingState />}

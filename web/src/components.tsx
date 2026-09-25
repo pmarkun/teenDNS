@@ -17,6 +17,42 @@ export function Arrow() {
   )
 }
 
+export function SiteHeader() {
+  return (
+    <header className="site-header">
+      <Logo />
+      <nav aria-label="Navegação principal">
+        <a href="/como">como funciona</a>
+        <a href="/#configurar">configurar</a>
+        <a className="youth-nav" href="/meu-dns">minhas regras</a>
+        <a className="button button--acid" href="/painel">ABRIR PAINEL</a>
+      </nav>
+    </header>
+  )
+}
+
+export function SiteFooter() {
+  return (
+    <footer className="site-footer">
+      <Logo />
+    </footer>
+  )
+}
+
+export function CarePrinciple({ number, name, caption, tone }: {
+  number: string
+  name: string
+  caption: string
+  tone: 'acid' | 'blue' | 'red'
+}) {
+  return (
+    <div className={`choice choice--${tone}`}>
+      <b>{number}</b>
+      <div><h3>{name}</h3><p>{caption}</p></div>
+    </div>
+  )
+}
+
 export function Drawer({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
     <div className="drawer-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
