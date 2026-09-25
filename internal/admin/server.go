@@ -181,6 +181,35 @@ type pairingOutcomeResponse struct {
 	ProfileID string `json:"profile_id,omitempty"`
 }
 
+// extensionPolicyResponse is the read-only snapshot of a profile's policy that
+// a paired teenDNS extension mirrors locally to decide the per-tab state it
+// enforces and displays. It is scoped to a pairing session token and carries
+// exactly what the extension's decision engine needs: rules, groups, pauses
+// and the house time zone — no hostname, house id, catalog metadata or
+// housekeeping fields.
+type extensionPolicyResponse struct {
+	Label         string               `json:"label"`
+	Fingerprint   string               `json:"fingerprint"`
+	DefaultAction policy.Action        `json:"default_action"`
+	Version       int64                `json:"version"`
+	TimeZone      string               `json:"time_zone"`
+	Rules         []policy.Rule        `json:"rules"`
+	Groups        []extensionGroupView `json:"groups"`
+	Pauses        []policy.TimeWindow  `json:"pauses"`
+}
+
+// extensionGroupView trims a RuleGroup down to what the extension enforces,
+// dropping catalog bookkeeping (default_domains, domain_source, customized).
+type extensionGroupView struct {
+	ID        string                   `json:"id"`
+	Name      string                   `json:"name"`
+	Action    policy.Action            `json:"action"`
+	Category  string                   `json:"category,omitempty"`
+	Reason    string                   `json:"reason,omitempty"`
+	Domains   []string                 `json:"domains"`
+	Schedules []policy.ScheduledAction `json:"schedules,omitempty"`
+}
+
 // setupInfoResponse carries values for manual device configuration: hostname,
 // public resolver IP (may be empty in the lab), DoT port, the test domain and
 // an optional HTTPS DoH endpoint for browsers with a custom provider setting.
@@ -282,6 +311,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/pairing/challenges/{id}", s.pairingChallengeStatus)
 	mux.HandleFunc("GET /api/v1/pairing/challenges/{id}/outcome", s.authorize(s.pairingChallengeOutcome))
 	mux.HandleFunc("GET /api/v1/youth/profile", s.youthProfile)
+	mux.HandleFunc("GET /api/v1/extension/policy", s.extensionPolicy)
 	mux.HandleFunc("POST /api/v1/houses", s.registerHouse)
 	mux.HandleFunc("GET /api/v1/houses", s.authorize(s.listHouses))
 	mux.HandleFunc("DELETE /api/v1/houses/{id}", s.authorize(s.deleteHouse))
@@ -819,6 +849,52 @@ func (s *Server) youthProfile(writer http.ResponseWriter, request *http.Request)
 			continue
 		}
 		result.Rules = append(result.Rules, youthRule{Name: group.Name, Reason: group.Reason})
+	}
+	writer.Header().Set("Cache-Control", "no-store")
+	writeJSON(writer, http.StatusOK, result)
+}
+
+// extensionPolicy serves a pairing session its profile's policy snapshot. The
+// token is exchanged via the DNS challenge flow, so possession of it already
+// proves the request originates from a device using the house resolver — the
+// same trust boundary as youthProfile.
+func (s *Server) extensionPolicy(writer http.ResponseWriter, request *http.Request) {
+	sessionToken := strings.TrimPrefix(request.Header.Get("Authorization"), "Bearer ")
+	profileID, ok := s.pairings.Profile(sessionToken)
+	if !ok {
+		writeError(writer, http.StatusUnauthorized, errors.New("invalid or expired pairing session"))
+		return
+	}
+	profile, ok := s.findProfile(profileID)
+	if !ok || profile.Disabled {
+		writeError(writer, http.StatusNotFound, errors.New("profile not found"))
+		return
+	}
+	timeZone := profile.TimeZone
+	if timeZone == "" {
+		timeZone = policy.DefaultTimeZone
+	}
+	groups := make([]extensionGroupView, 0, len(profile.Groups))
+	for _, group := range profile.Groups {
+		groups = append(groups, extensionGroupView{
+			ID:        group.ID,
+			Name:      group.Name,
+			Action:    group.Action,
+			Category:  group.Category,
+			Reason:    group.Reason,
+			Domains:   append([]string{}, group.Domains...),
+			Schedules: append([]policy.ScheduledAction(nil), group.Schedules...),
+		})
+	}
+	result := extensionPolicyResponse{
+		Label:         profile.Label,
+		Fingerprint:   strings.SplitN(profile.Hostname, ".", 2)[0],
+		DefaultAction: profile.DefaultAction,
+		Version:       profile.Version,
+		TimeZone:      timeZone,
+		Rules:         append([]policy.Rule{}, profile.Rules...),
+		Groups:        groups,
+		Pauses:        append([]policy.TimeWindow{}, profile.Pauses...),
 	}
 	writer.Header().Set("Cache-Control", "no-store")
 	writeJSON(writer, http.StatusOK, result)

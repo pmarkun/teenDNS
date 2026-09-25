@@ -215,6 +215,15 @@ cada consulta; não há tarefa de cron. Intervalos noturnos podem atravessar a
 meia-noite, com os dias indicando quando começam. Alterar o fuso da casa atualiza
 as rotinas de todos os perfis dela.
 
+## Snapshot de política da extensão Chrome
+
+Depois do pareamento por desafio DNS, a extensão usa
+`GET /api/v1/extension/policy` com o `session_token` no cabeçalho Bearer. A
+rota retorna somente o snapshot de regras, grupos, pausas e fuso horário do
+perfil pareado; não usa a chave administrativa da casa. Sem sessão válida,
+responde `401`; sessão válida para perfil desativado ou removido responde
+`404`. A resposta usa `Cache-Control: no-store`.
+
 ## Verificações do primeiro deploy
 
 - HTTPS público retornou `200` com certificado válido;
