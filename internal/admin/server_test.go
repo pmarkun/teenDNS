@@ -1104,6 +1104,7 @@ func testConfig() config.Config {
 }
 
 func TestSetupDownloadsConfiguredFiles(t *testing.T) {
+	t.Setenv("TEENDNS_DOH_BASE_URL", "https://teendns.lab.markun.com.br/dns-query/")
 	cfg := testConfig()
 	path := filepath.Join(t.TempDir(), "gateway.json")
 	if err := config.WriteAtomic(path, cfg, 0o600); err != nil {
@@ -1159,9 +1160,26 @@ func TestSetupDownloadsConfiguredFiles(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("info: expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	for _, want := range []string{`"hostname":"p-home.dns.teendns.test"`, `"ip":"203.0.113.10"`, `"port":"853"`, `"test_domain":"example.com"`} {
+	for _, want := range []string{`"hostname":"p-home.dns.teendns.test"`, `"ip":"203.0.113.10"`, `"port":"853"`, `"test_domain":"example.com"`, `"doh_url":"https://teendns.lab.markun.com.br/dns-query/p-home"`} {
 		if !strings.Contains(rec.Body.String(), want) {
 			t.Errorf("info missing %q", want)
+		}
+	}
+}
+
+func TestNormalizeDoHBaseURLRequiresHTTPSAndExpectedPath(t *testing.T) {
+	base, err := normalizeDoHBaseURL(" https://teendns.lab.markun.com.br/dns-query/ ")
+	if err != nil || base != "https://teendns.lab.markun.com.br/dns-query" {
+		t.Fatalf("unexpected normalized DoH base URL %q, %v", base, err)
+	}
+	for _, invalid := range []string{
+		"http://teendns.lab.markun.com.br/dns-query",
+		"https://user:password@teendns.lab.markun.com.br/dns-query",
+		"https://teendns.lab.markun.com.br/other",
+		"https://teendns.lab.markun.com.br/dns-query?profile=secret",
+	} {
+		if _, err := normalizeDoHBaseURL(invalid); err == nil {
+			t.Errorf("expected invalid DoH base URL %q to be rejected", invalid)
 		}
 	}
 }

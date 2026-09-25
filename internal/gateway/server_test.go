@@ -1,6 +1,10 @@
 package gateway
 
 import (
+	"bytes"
+	"encoding/base64"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -119,6 +123,87 @@ func TestResolveBlocksEveryDomainDuringProfilePause(t *testing.T) {
 	}
 	if len(sink.events) != 1 || sink.events[0].Action != policy.ActionBlock || sink.events[0].Category != "global_pause" || sink.events[0].Reason != "Pausa geral" {
 		t.Fatalf("expected a pause event, got %+v", sink.events)
+	}
+}
+
+func TestDoHHandlerSupportsGetAndPostWithProfilePolicy(t *testing.T) {
+	manager, err := policy.NewManager([]policy.Profile{{
+		ID: "home", Hostname: "p-secret.dns.test", DefaultAction: policy.ActionAllow,
+		Groups: []policy.RuleGroup{{ID: "blocked", Name: "Bloqueado", Action: policy.ActionBlock, Domains: []string{"blocked.test"}}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sink := &recordingSink{}
+	server := NewServer("", nil, manager, "", 300, sink, nil)
+	requestMessage := new(dns.Msg)
+	requestMessage.SetQuestion("blocked.test.", dns.TypeA)
+	wire, err := requestMessage.Pack()
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint := "/dns-query/p-secret"
+	requests := []*http.Request{
+		httptest.NewRequest(http.MethodGet, endpoint+"?dns="+base64.RawURLEncoding.EncodeToString(wire), nil),
+		httptest.NewRequest(http.MethodPost, endpoint, bytes.NewReader(wire)),
+	}
+	requests[1].Header.Set("Content-Type", "application/dns-message")
+
+	for _, request := range requests {
+		response := httptest.NewRecorder()
+		server.DoHHandler().ServeHTTP(response, request)
+		if response.Code != http.StatusOK || response.Header().Get("Content-Type") != "application/dns-message" {
+			t.Fatalf("unexpected DoH response: %d %q %s", response.Code, response.Header().Get("Content-Type"), response.Body.String())
+		}
+		var dnsResponse dns.Msg
+		if err := dnsResponse.Unpack(response.Body.Bytes()); err != nil {
+			t.Fatalf("response is not a DNS message: %v", err)
+		}
+		if dnsResponse.Rcode != dns.RcodeNameError {
+			t.Fatalf("expected the profile rule to return NXDOMAIN, got %s", dns.RcodeToString[dnsResponse.Rcode])
+		}
+		if response.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("DoH response is cacheable: %q", response.Header().Get("Cache-Control"))
+		}
+	}
+	if len(sink.events) != 2 || sink.events[0].ProfileID != "home" || sink.events[1].ProfileID != "home" {
+		t.Fatalf("DoH requests were not attributed to their profile: %+v", sink.events)
+	}
+}
+
+func TestDoHHandlerRejectsMalformedAndUnknownRequests(t *testing.T) {
+	manager, err := policy.NewManager([]policy.Profile{{ID: "home", Hostname: "p-secret.dns.test", DefaultAction: policy.ActionAllow}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewServer("", nil, manager, "", 300, nil, nil).DoHHandler()
+	cases := []struct {
+		name   string
+		method string
+		path   string
+		typeOf string
+		body   string
+		status int
+	}{
+		{name: "unknown profile", method: http.MethodGet, path: "/dns-query/p-other?dns=AA", status: http.StatusNotFound},
+		{name: "missing dns parameter", method: http.MethodGet, path: "/dns-query/p-secret", status: http.StatusBadRequest},
+		{name: "malformed dns parameter", method: http.MethodGet, path: "/dns-query/p-secret?dns=not-base64", status: http.StatusBadRequest},
+		{name: "unsupported media type", method: http.MethodPost, path: "/dns-query/p-secret", typeOf: "application/json", body: "{}", status: http.StatusUnsupportedMediaType},
+		{name: "invalid dns packet", method: http.MethodPost, path: "/dns-query/p-secret", typeOf: "application/dns-message", body: "bad", status: http.StatusBadRequest},
+		{name: "unsupported method", method: http.MethodPut, path: "/dns-query/p-secret", status: http.StatusMethodNotAllowed},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(test.method, test.path, bytes.NewBufferString(test.body))
+			if test.typeOf != "" {
+				request.Header.Set("Content-Type", test.typeOf)
+			}
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != test.status {
+				t.Fatalf("expected HTTP %d, got %d: %s", test.status, response.Code, response.Body.String())
+			}
+		})
 	}
 }
 

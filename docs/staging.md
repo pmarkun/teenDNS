@@ -156,8 +156,8 @@ Hackathon: cada perfil ganhou no painel uma gaveta **CONFIGURAR UM APARELHO**
 que gera, sob `GET /api/v1/profiles/{id}/setup/`, arquivos de configuração
 calculados na hora:
 
-- `info` — valores neutros usados pela interface (nome do servidor, IP quando
-  conhecido, porta `853`, domínio de teste `example.com`);
+- `info` — valores usados pela interface (nome do servidor, IP quando conhecido,
+  porta `853`, domínio de teste `example.com` e `doh_url` quando configurado);
 - `windows.bat` — instalador para **Windows 11 24H2+** (gate `lss 26100`):
   autoelevação de administrador, DoT por perfil via
   `netsh dns add encryption server=… dothost=…:853 autoupgrade=yes
@@ -173,6 +173,10 @@ domínio de teste. Revogação continua sendo por rotação de hostname — o
 endereço antigo para de funcionar e as configurações geradas antes ficam
 órfãs.
 
+O Chrome usa DoH, diferente do DNS privado DoT configurado por Android,
+Windows e Apple. O Nginx encaminha `/dns-query/` ao gateway sem gravar esse
+caminho nos access logs, pois ele contém a credencial opaca do perfil.
+
 O IP público vem de `TEENDNS_DNS_PUBLIC_IP`. No staging, porque o apex
 `dns.lab.markun.com.br` não é resolvido publicamente (só o wildcard cobre
 subdomínios), o compose define
@@ -184,6 +188,16 @@ O botão **JÁ INSTALOU? TESTAR** cria um desafio de pareamento e pergunta ao
 próprio DNS se algum aparelho do perfil respondeu
 (`GET /api/v1/pairing/challenges/{id}/outcome`, escopado por casa). O fluxo foi
 implantado e validado no staging junto com a configuração por aparelho.
+
+## DoH para Chrome
+
+Chrome exige DNS-over-HTTPS (DoH), enquanto o hostname de aparelho usado por
+Android/Windows é DNS-over-TLS (DoT). O endpoint DoH usa o certificado HTTPS
+automático do domínio público do site e o caminho `/dns-query/{rótulo-p-…}`;
+`TEENDNS_DOH_BASE_URL` define sua base (`https://teendns.lab.markun.com.br/dns-query`).
+O primeiro rótulo opaco do hostname (`p-…`) identifica o perfil no caminho; o
+sufixo DNS não precisa ser repetido. O access log do Nginx está desativado apenas
+nessa rota. A política, os eventos e as pausas são os mesmos do gateway DoT.
 
 ## Horários e pausas
 

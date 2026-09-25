@@ -1,6 +1,6 @@
 # Estado da execução
 
-Atualizado em 24 de setembro de 2026. Branch: `main`.
+Atualizado em 24 de setembro de 2026. Branch: `feature/chrome-doh`.
 
 ## Marcos
 
@@ -39,7 +39,8 @@ Novos casos cobertos por testes:
   alta), sem cair na lista de espera;
 - a carga do `gateway.json` migra `email` → `emails` para casas existentes;
 - `GET /api/v1/profiles/{id}/setup/info` expõe nome do servidor, IP (quando
-  conhecido), porta e domínio de teste — valores neutros, sem dados pessoais;
+  conhecido), porta e domínio de teste e, quando configurado, a URL DoH do
+  perfil. O hostname/URL é uma credencial opaca, sem dado pessoal;
 - `GET /api/v1/profiles/{id}/setup/windows.bat`,
   `windows-remove.bat` e `apple.mobileconfig` geram instalador e removidor
   para Windows 24H2+ (gate `lss 26100`, DoT por perfil com
@@ -56,6 +57,10 @@ Novos casos cobertos por testes:
   semanais; pausas do perfil bloqueiam qualquer domínio e prevalecem sobre regras;
   janelas noturnas, bordas exclusivas, sobreposição inválida e fuso IANA da casa
   são validados e cobertos por testes.
+- DoH RFC 8484 aceita GET e POST, resolve a política pelo rótulo opaco `p-…`
+  do perfil (sem repetir o sufixo DNS) e rejeita perfil desconhecido, corpo
+  inválido e media type incorreto;
+  a URL DoH do Chrome é gerada no `setup/info` apenas quando configurada.
 
 ### Integração em containers
 
@@ -144,6 +149,9 @@ Validação no navegador conectado:
 - gaveta de horários do painel verificada em Chromium em desktop e celular com
   API simulada: pausa geral adicionada e salva, agendamento por grupo acessível
   na seção recolhida, sem rolagem horizontal e sem erros no console.
+- gaveta de configuração mostra o endpoint DoH customizado do Chrome e o botão
+  de cópia quando `setup/info` inclui `doh_url`; URL e instrução verificados em
+  Chromium emulado em `390 × 844`, sem rolagem horizontal nem erros no console.
 
 ### Catálogo v1
 

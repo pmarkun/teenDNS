@@ -114,6 +114,7 @@ export type SetupInfo = {
   ip?: string
   port: string
   test_domain: string
+  doh_url?: string
 }
 
 export type PairingOutcome = {

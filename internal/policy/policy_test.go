@@ -126,6 +126,32 @@ func TestStoreFindsNormalizedHostname(t *testing.T) {
 	}
 }
 
+func TestManagerFindsProfileByOpaqueHostnameLabel(t *testing.T) {
+	manager, err := NewManager([]Profile{{
+		ID: "ana", Hostname: "p-secret.dns.teendns.test", DefaultAction: ActionAllow,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, ok := manager.ProfileLabel("P-SECRET")
+	if !ok || profile.ID != "ana" {
+		t.Fatalf("unexpected opaque-label lookup: %+v, %v", profile, ok)
+	}
+	if _, ok := manager.ProfileLabel("p-secret.other.dns.test"); ok {
+		t.Fatal("profile label lookup must accept a single opaque label, not a hostname")
+	}
+}
+
+func TestStoreRejectsDuplicateOpaqueProfileLabels(t *testing.T) {
+	_, err := NewStore([]Profile{
+		{ID: "one", Hostname: "p-shared.dns-one.test", DefaultAction: ActionAllow},
+		{ID: "two", Hostname: "p-shared.dns-two.test", DefaultAction: ActionAllow},
+	})
+	if err == nil {
+		t.Fatal("expected duplicate opaque labels to be rejected")
+	}
+}
+
 func TestManagerReplacesProfilesAtomically(t *testing.T) {
 	manager, err := NewManager([]Profile{
 		{ID: "ana", Hostname: "p-ana.dns.teendns.test", DefaultAction: ActionAllow, Version: 1},
