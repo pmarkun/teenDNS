@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync/atomic"
+	"time"
 )
 
 type Action string
@@ -24,27 +25,44 @@ type Rule struct {
 }
 
 type RuleGroup struct {
-	ID             string   `json:"id"`
-	Name           string   `json:"name"`
-	Action         Action   `json:"action"`
-	Category       string   `json:"category,omitempty"`
-	Reason         string   `json:"reason,omitempty"`
-	Domains        []string `json:"domains"`
-	DefaultDomains []string `json:"default_domains,omitempty"`
-	DomainSource   string   `json:"domain_source,omitempty"`
-	Customized     bool     `json:"customized,omitempty"`
+	ID             string            `json:"id"`
+	Name           string            `json:"name"`
+	Action         Action            `json:"action"`
+	Category       string            `json:"category,omitempty"`
+	Reason         string            `json:"reason,omitempty"`
+	Domains        []string          `json:"domains"`
+	DefaultDomains []string          `json:"default_domains,omitempty"`
+	DomainSource   string            `json:"domain_source,omitempty"`
+	Customized     bool              `json:"customized,omitempty"`
+	Schedules      []ScheduledAction `json:"schedules,omitempty"`
+}
+
+type TimeWindow struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	Days  []int  `json:"days"`
+	Start string `json:"start"`
+	End   string `json:"end"`
+}
+
+type ScheduledAction struct {
+	TimeWindow
+	Action Action `json:"action"`
 }
 
 type Profile struct {
-	ID            string      `json:"id"`
-	HouseID       string      `json:"house_id,omitempty"`
-	Label         string      `json:"label,omitempty"`
-	Hostname      string      `json:"hostname"`
-	Disabled      bool        `json:"disabled,omitempty"`
-	DefaultAction Action      `json:"default_action"`
-	Version       int64       `json:"version"`
-	Rules         []Rule      `json:"rules"`
-	Groups        []RuleGroup `json:"groups,omitempty"`
+	ID            string         `json:"id"`
+	HouseID       string         `json:"house_id,omitempty"`
+	Label         string         `json:"label,omitempty"`
+	Hostname      string         `json:"hostname"`
+	Disabled      bool           `json:"disabled,omitempty"`
+	DefaultAction Action         `json:"default_action"`
+	Version       int64          `json:"version"`
+	Rules         []Rule         `json:"rules"`
+	Groups        []RuleGroup    `json:"groups,omitempty"`
+	Pauses        []TimeWindow   `json:"pauses,omitempty"`
+	TimeZone      string         `json:"-"`
+	Location      *time.Location `json:"-"`
 }
 
 type Decision struct {
@@ -53,6 +71,7 @@ type Decision struct {
 	Reason        string
 	MatchedDomain string
 	GroupName     string
+	ScheduleLabel string
 	PolicyVersion int64
 }
 
@@ -107,6 +126,21 @@ func NewStore(profiles []Profile) (*Store, error) {
 		if !validAction(profile.DefaultAction) {
 			return nil, fmt.Errorf("profile %q has invalid default action %q", profile.ID, profile.DefaultAction)
 		}
+		location, err := profileLocation(profile.TimeZone)
+		if err != nil {
+			return nil, fmt.Errorf("profile %q time zone: %w", profile.ID, err)
+		}
+		profile.Location = location
+		pauseIDs := make(map[string]struct{}, len(profile.Pauses))
+		for index, pause := range profile.Pauses {
+			if err := validateWindow(pause); err != nil {
+				return nil, fmt.Errorf("profile %q pause %d: %w", profile.ID, index, err)
+			}
+			if _, exists := pauseIDs[pause.ID]; exists {
+				return nil, fmt.Errorf("profile %q repeats pause id %q", profile.ID, pause.ID)
+			}
+			pauseIDs[pause.ID] = struct{}{}
+		}
 
 		profile.Hostname = normalizedHostname
 		for index := range profile.Rules {
@@ -131,6 +165,23 @@ func NewStore(profiles []Profile) (*Store, error) {
 			groupIDs[group.ID] = struct{}{}
 			if !validAction(group.Action) {
 				return nil, fmt.Errorf("profile %q group %q has invalid action %q", profile.ID, group.ID, group.Action)
+			}
+			scheduleIDs := make(map[string]struct{}, len(group.Schedules))
+			occupied := make(map[int]string)
+			for scheduleIndex, schedule := range group.Schedules {
+				if err := validateWindow(schedule.TimeWindow); err != nil {
+					return nil, fmt.Errorf("profile %q group %q schedule %d: %w", profile.ID, group.ID, scheduleIndex, err)
+				}
+				if schedule.Action != ActionAllow && schedule.Action != ActionBlock {
+					return nil, fmt.Errorf("profile %q group %q schedule %q action must be allow or block", profile.ID, group.ID, schedule.ID)
+				}
+				if _, exists := scheduleIDs[schedule.ID]; exists {
+					return nil, fmt.Errorf("profile %q group %q repeats schedule id %q", profile.ID, group.ID, schedule.ID)
+				}
+				scheduleIDs[schedule.ID] = struct{}{}
+				if conflict := occupyWindow(occupied, schedule.TimeWindow); conflict != "" {
+					return nil, fmt.Errorf("profile %q group %q schedules %q and %q overlap", profile.ID, group.ID, conflict, schedule.ID)
+				}
 			}
 			seenDomains := make(map[string]struct{}, len(group.Domains))
 			for domainIndex, domain := range group.Domains {
@@ -161,6 +212,10 @@ func (s *Store) Profile(hostname string) (Profile, bool) {
 }
 
 func Decide(profile Profile, queryName string) (Decision, error) {
+	return DecideAt(profile, queryName, time.Now())
+}
+
+func DecideAt(profile Profile, queryName string, now time.Time) (Decision, error) {
 	name, err := normalizeName(queryName)
 	if err != nil {
 		return Decision{}, err
@@ -169,6 +224,23 @@ func Decide(profile Profile, queryName string) (Decision, error) {
 	decision := Decision{
 		Action:        profile.DefaultAction,
 		PolicyVersion: profile.Version,
+	}
+	location := profile.Location
+	if location == nil {
+		location, err = profileLocation(profile.TimeZone)
+		if err != nil {
+			return Decision{}, err
+		}
+	}
+	localNow := now.In(location)
+	for _, pause := range profile.Pauses {
+		if windowActive(pause, localNow) {
+			decision.Action = ActionBlock
+			decision.Category = "global_pause"
+			decision.Reason = "Pausa geral"
+			decision.ScheduleLabel = pause.Label
+			return decision, nil
+		}
 	}
 	bestMatchLength := -1
 
@@ -199,6 +271,10 @@ func Decide(profile Profile, queryName string) (Decision, error) {
 			decision.Reason = group.Reason
 			decision.MatchedDomain = domain
 			decision.GroupName = group.Name
+			if schedule, active := activeScheduledAction(group.Schedules, localNow); active {
+				decision.Action = schedule.Action
+				decision.ScheduleLabel = schedule.Label
+			}
 		}
 	}
 

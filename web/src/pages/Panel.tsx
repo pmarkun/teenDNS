@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
-import { Action, api, CatalogPackage, EventSummary, clearToken, getToken, PairingOutcome, Profile, RuleGroup, setToken, SetupInfo } from '../api'
+import { Action, api, CatalogPackage, EventSummary, clearToken, getToken, PairingOutcome, Profile, RuleGroup, ScheduledAction, setToken, SetupInfo, TimeWindow } from '../api'
 import { Drawer, Logo } from '../components'
 
 const wait = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds))
@@ -9,7 +9,7 @@ export function Panel() {
   const [packages, setPackages] = useState<CatalogPackage[]>([])
   const [selectedID, setSelectedID] = useState('')
   const [summary, setSummary] = useState<EventSummary | null>(null)
-  const [drawer, setDrawer] = useState<'group' | 'packages' | 'details' | 'advanced' | 'profile' | 'setup' | null>(null)
+  const [drawer, setDrawer] = useState<'group' | 'packages' | 'details' | 'advanced' | 'profile' | 'setup' | 'schedules' | null>(null)
   const [editingGroup, setEditingGroup] = useState<RuleGroup | null>(null)
   const [status, setStatus] = useState('carregando')
   const [error, setError] = useState('')
@@ -21,6 +21,7 @@ export function Panel() {
   )
   const groups = selected?.groups || []
   const activePackageCount = packages.filter((item) => groups.some((group) => group.id === item.id && group.domains.length > 0)).length
+  const scheduleCount = (selected?.pauses?.length || 0) + groups.reduce((total, group) => total + (group.schedules?.length || 0), 0)
 
   const load = useCallback(async () => {
     try {
@@ -77,7 +78,7 @@ export function Panel() {
     <main className="panel">
       <header className="panel-header">
         <Logo />
-        <nav><a href="/#como">entenda</a><a href="/meu-dns">visão jovem</a><a href="/#configurar">ajuda</a></nav>
+        <nav><a href="/como">entenda</a><a href="/meu-dns">visão jovem</a><a href="/#configurar">ajuda</a></nav>
         <div className="panel-header-actions">
           <div className={`service-status ${status !== 'tá rodando' ? 'service-status--busy' : ''}`} aria-live="polite">
             <i /> {status}
@@ -95,7 +96,6 @@ export function Panel() {
         ))}
         <button className="profile-add" onClick={() => setDrawer('profile')}>+ novo</button>
         <img className="panel-cat" src="/assets/zine-cat.png" alt="" />
-        <p>internet melhor.<br />gente real.</p>
       </aside>
 
       {selected ? (
@@ -133,6 +133,7 @@ export function Panel() {
           <div className="rule-actions">
             <button onClick={() => { setEditingGroup(null); setDrawer('group') }}>+ botar outra regra</button>
             <button onClick={() => setDrawer('packages')}>pacotes prontos <small>{activePackageCount}/{packages.length}</small> →</button>
+            <button onClick={() => setDrawer('schedules')}>horários <small>{scheduleCount}</small> →</button>
             <button onClick={() => setDrawer('advanced')}>mexer nas partes nerds →</button>
           </div>
         </section>
@@ -152,6 +153,7 @@ export function Panel() {
       {drawer === 'details' && <DetailsDrawer summary={summary} onClose={() => setDrawer(null)} />}
       {drawer === 'advanced' && selected && <AdvancedDrawer profile={selected} onClose={() => setDrawer(null)} onRotated={(profile) => setProfiles((all) => all.map((item) => item.id === profile.id ? profile : item))} />}
       {drawer === 'setup' && selected && <SetupDrawer profile={selected} onClose={() => setDrawer(null)} />}
+      {drawer === 'schedules' && selected && <ScheduleDrawer profile={selected} onClose={() => setDrawer(null)} onSaved={(saved) => setProfiles((all) => all.map((item) => item.id === saved.id ? saved : item))} />}
       {error && <button className="toast" onClick={() => setError('')}>{error} ×</button>}
     </main>
   )
@@ -242,12 +244,171 @@ function parseDomains(value: string) {
   return [...new Set(value.split(/[\n,]/).map((domain) => domain.trim().toLowerCase()).filter(Boolean))]
 }
 
+const weekdayOptions = [
+  { value: 1, short: 'seg', full: 'segunda-feira' },
+  { value: 2, short: 'ter', full: 'terça-feira' },
+  { value: 3, short: 'qua', full: 'quarta-feira' },
+  { value: 4, short: 'qui', full: 'quinta-feira' },
+  { value: 5, short: 'sex', full: 'sexta-feira' },
+  { value: 6, short: 'sáb', full: 'sábado' },
+  { value: 0, short: 'dom', full: 'domingo' },
+]
+
+const houseTimeZones = [
+  { value: 'America/Sao_Paulo', label: 'Brasília e maior parte do Brasil' },
+  { value: 'America/Manaus', label: 'Manaus' },
+  { value: 'America/Rio_Branco', label: 'Rio Branco' },
+  { value: 'America/Noronha', label: 'Fernando de Noronha' },
+]
+
+function weekdaySummary(days: number[]) {
+  const sorted = [...new Set(days)].sort((left, right) => left - right)
+  if (sorted.length === 7) return 'todos os dias'
+  if (sorted.join(',') === '1,2,3,4,5') return 'dias úteis'
+  if (sorted.join(',') === '0,6') return 'fim de semana'
+  return weekdayOptions.filter((day) => sorted.includes(day.value)).map((day) => day.short).join(', ')
+}
+
+function WeekdayPicker({ days, onChange }: { days: number[]; onChange: (days: number[]) => void }) {
+  function choose(next: number[]) {
+    onChange([...next].sort((left, right) => left - right))
+  }
+  function toggle(day: number) {
+    choose(days.includes(day) ? days.filter((item) => item !== day) : [...days, day])
+  }
+  return <fieldset className="weekday-field">
+    <legend>dias</legend>
+    <div className="weekday-presets">
+      <button type="button" aria-pressed={days.length === 7} onClick={() => choose([0, 1, 2, 3, 4, 5, 6])}>todos</button>
+      <button type="button" aria-pressed={days.join(',') === '1,2,3,4,5'} onClick={() => choose([1, 2, 3, 4, 5])}>dias úteis</button>
+      <button type="button" aria-pressed={days.join(',') === '0,6'} onClick={() => choose([0, 6])}>fim de semana</button>
+    </div>
+    <div className="weekday-buttons">
+      {weekdayOptions.map((day) => <button key={day.value} type="button" aria-label={day.full} aria-pressed={days.includes(day.value)} onClick={() => toggle(day.value)}>{day.short}</button>)}
+    </div>
+  </fieldset>
+}
+
+function windowsOverlap(first: TimeWindow, second: TimeWindow) {
+  const occupied = new Set<number>()
+  function fill(window: TimeWindow, target: Set<number>) {
+    const [startHour, startMinute] = window.start.split(':').map(Number)
+    const [endHour, endMinute] = window.end.split(':').map(Number)
+    const start = startHour * 60 + startMinute
+    let duration = endHour * 60 + endMinute - start
+    if (duration <= 0) duration += 1440
+    for (const day of window.days) {
+      for (let offset = 0; offset < duration; offset += 1) target.add((day * 1440 + start + offset) % 10080)
+    }
+  }
+  fill(first, occupied)
+  const candidate = new Set<number>()
+  fill(second, candidate)
+  return [...candidate].some((minute) => occupied.has(minute))
+}
+
+function ScheduleDrawer({ profile, onClose, onSaved }: { profile: Profile; onClose: () => void; onSaved: (profile: Profile) => void }) {
+  const [windows, setWindows] = useState<TimeWindow[]>(profile.pauses || [])
+  const [timeZone, setTimeZone] = useState('America/Sao_Paulo')
+  const [zoneLoaded, setZoneLoaded] = useState(!profile.house_id)
+  const [label, setLabel] = useState('')
+  const [days, setDays] = useState([0, 1, 2, 3, 4, 5, 6])
+  const [start, setStart] = useState('21:30')
+  const [end, setEnd] = useState('07:00')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!profile.house_id) return
+    let active = true
+    setZoneLoaded(false)
+    void api.houseTimeZone(profile.house_id).then((result) => {
+      if (!active) return
+      setTimeZone(result.time_zone)
+      setZoneLoaded(true)
+    }).catch((cause) => {
+      if (!active) return
+      setError(cause instanceof Error ? cause.message : 'Não foi possível carregar o fuso da casa')
+    })
+    return () => { active = false }
+  }, [profile.house_id])
+
+  function addPause() {
+    if (!label.trim() || label.length > 80 || days.length === 0 || !/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end) || start === end) {
+      setError('Dê um nome, escolha os dias e informe um intervalo válido.')
+      return
+    }
+    setWindows((current) => [...current, {
+      id: crypto.randomUUID(),
+      label: label.trim(),
+      days: [...days].sort((left, right) => left - right),
+      start,
+      end,
+    }])
+    setLabel('')
+    setError('')
+  }
+
+  async function save() {
+    setBusy(true)
+    setError('')
+    try {
+      const saved = await api.updateProfile({ ...profile, pauses: windows }, profile.house_id ? timeZone : undefined)
+      onSaved(saved)
+      onClose()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível salvar os horários')
+      setBusy(false)
+    }
+  }
+
+  return <Drawer title="HORÁRIOS DESTE PERFIL" onClose={onClose}>
+    <div className="schedule-drawer">
+      <p className="schedule-explainer">A pausa geral bloqueia novas consultas de todos os domínios deste perfil pelo teenDNS. Respostas em cache e conexões já abertas não são desligadas na hora; VPN, DNS próprio ou acesso direto por IP também podem contornar a pausa.</p>
+      {profile.house_id
+        ? <label>fuso horário da casa<select value={timeZone} disabled={!zoneLoaded || busy} onChange={(event) => setTimeZone(event.target.value)}>
+          {!houseTimeZones.some((zone) => zone.value === timeZone) && <option value={timeZone}>{timeZone}</option>}
+          {houseTimeZones.map((zone) => <option key={zone.value} value={zone.value}>{zone.label}</option>)}
+        </select></label>
+        : <p className="schedule-note">Este perfil de teste usa o fuso de Brasília.</p>}
+      <h3>pausas gerais</h3>
+      {windows.length === 0 && <p className="schedule-note">Ainda não há pausas para este perfil.</p>}
+      {windows.map((window) => <div className="schedule-entry" key={window.id}>
+        <div><strong>{window.label}</strong><span>{weekdaySummary(window.days)} · {window.start}–{window.end}</span></div>
+        <button type="button" aria-label={`Remover pausa ${window.label}`} onClick={() => setWindows((current) => current.filter((item) => item.id !== window.id))}>×</button>
+      </div>)}
+      <div className="schedule-examples">
+        <span>começar com</span>
+        <button type="button" onClick={() => { setLabel('Dormir'); setStart('21:30'); setEnd('07:00') }}>dormir</button>
+        <button type="button" onClick={() => { setLabel('Refeição'); setStart('12:00'); setEnd('13:00') }}>refeição</button>
+      </div>
+      <label>nome da pausa<input maxLength={80} value={label} onChange={(event) => setLabel(event.target.value)} placeholder="ex.: dormir" /></label>
+      <WeekdayPicker days={days} onChange={setDays} />
+      <div className="schedule-times">
+        <label>das<input type="time" required value={start} onChange={(event) => setStart(event.target.value)} /></label>
+        <label>às<input type="time" required value={end} onChange={(event) => setEnd(event.target.value)} /></label>
+      </div>
+      <p className="schedule-note">Em intervalos noturnos, os dias indicam quando a pausa começa.</p>
+      <button type="button" className="restore-button" onClick={addPause}>ADICIONAR PAUSA →</button>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <button type="button" className="button button--ink schedule-save" disabled={busy || !zoneLoaded} onClick={() => void save()}>{busy ? 'SALVANDO…' : 'SALVAR HORÁRIOS'}</button>
+    </div>
+  </Drawer>
+}
+
 function GroupDrawer({ profile, group, onClose, onSaved }: { profile: Profile; group: RuleGroup | null; onClose: () => void; onSaved: (profile: Profile) => void }) {
   const [domainsText, setDomainsText] = useState((group?.domains || []).join('\n'))
   const [name, setName] = useState(group?.name || '')
   const [action, setAction] = useState<Action>(group?.action || 'block')
   const [reason, setReason] = useState(group?.reason || '')
   const [customized, setCustomized] = useState(group?.customized || false)
+  const [schedules, setSchedules] = useState<ScheduledAction[]>(group?.schedules || [])
+  const [scheduleLabel, setScheduleLabel] = useState('')
+  const [scheduleDays, setScheduleDays] = useState([1, 2, 3, 4, 5])
+  const [scheduleStart, setScheduleStart] = useState('16:00')
+  const [scheduleEnd, setScheduleEnd] = useState('18:00')
+  const [scheduleAction, setScheduleAction] = useState<'allow' | 'block'>(group?.action === 'block' ? 'allow' : 'block')
+  const [scheduleError, setScheduleError] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const domains = parseDomains(domainsText)
@@ -269,6 +430,7 @@ function GroupDrawer({ profile, group, onClose, onSaved }: { profile: Profile; g
         default_domains: defaults,
         domain_source: group?.domain_source,
         customized: group ? customized : true,
+        schedules,
       }
       const nextGroups = group
         ? (profile.groups || []).map((item) => item.id === group.id ? nextGroup : item)
@@ -285,11 +447,50 @@ function GroupDrawer({ profile, group, onClose, onSaved }: { profile: Profile; g
     setCustomized(false)
   }
 
+  function addSchedule() {
+    if (!scheduleLabel.trim() || scheduleLabel.length > 80 || scheduleDays.length === 0 || !/^\d{2}:\d{2}$/.test(scheduleStart) || !/^\d{2}:\d{2}$/.test(scheduleEnd) || scheduleStart === scheduleEnd) {
+      setScheduleError('Dê um nome, escolha os dias e informe um intervalo válido.')
+      return
+    }
+    const candidate: ScheduledAction = {
+      id: crypto.randomUUID(),
+      label: scheduleLabel.trim(),
+      days: [...scheduleDays].sort((left, right) => left - right),
+      start: scheduleStart,
+      end: scheduleEnd,
+      action: scheduleAction,
+    }
+    if (schedules.some((schedule) => windowsOverlap(schedule, candidate))) {
+      setScheduleError('Esse horário se sobrepõe a outro desta regra.')
+      return
+    }
+    setSchedules((current) => [...current, candidate])
+    setScheduleLabel('')
+    setScheduleError('')
+  }
+
   return <Drawer title={group ? `EDITAR ${group.name.toUpperCase()}` : 'BOTAR OUTRA REGRA'} onClose={onClose}><form className="drawer-form" onSubmit={(event) => void submit(event)}>
     <label>domínios <small>{domains.length} {domains.length === 1 ? 'domínio' : 'domínios'}</small><textarea className="domain-list" required placeholder={'exemplo.com\noutro-exemplo.com'} value={domainsText} onChange={(event) => { setDomainsText(event.target.value); setCustomized(true) }} /><small>um por linha — você também pode colar uma lista</small></label>
     {needsName && <label>nome da regra<input required placeholder="ex.: Jogos e apostas" value={name} onChange={(event) => setName(event.target.value)} /></label>}
     <label>o que fazer<select value={action} onChange={(event) => setAction(event.target.value as Action)}><option value="block">Proteger</option><option value="observe">Observar</option><option value="allow">Permitir</option></select></label>
     <label>por quê?<textarea required placeholder="Um motivo que faça sentido para a família." value={reason} onChange={(event) => setReason(event.target.value)} /></label>
+    <details className="schedule-settings">
+      <summary>programar horários <small>{schedules.length ? `${schedules.length} configurado(s)` : 'opcional'}</small></summary>
+      <p>A ação especial vale só no intervalo; fora dele, continua a ação escolhida acima. Horários noturnos terminam no dia seguinte, e respostas já em cache podem atrasar a mudança.</p>
+      {schedules.map((schedule) => <div className="schedule-entry" key={schedule.id}>
+        <div><strong>{schedule.label}</strong><span>{weekdaySummary(schedule.days)} · {schedule.start}–{schedule.end} · {schedule.action === 'allow' ? 'Permitir' : 'Proteger'}</span></div>
+        <button type="button" aria-label={`Remover horário ${schedule.label}`} onClick={() => setSchedules((current) => current.filter((item) => item.id !== schedule.id))}>×</button>
+      </div>)}
+      <label>nome do horário<input maxLength={80} value={scheduleLabel} onChange={(event) => setScheduleLabel(event.target.value)} placeholder="ex.: depois da escola" /></label>
+      <WeekdayPicker days={scheduleDays} onChange={setScheduleDays} />
+      <div className="schedule-times">
+        <label>das<input type="time" required value={scheduleStart} onChange={(event) => setScheduleStart(event.target.value)} /></label>
+        <label>às<input type="time" required value={scheduleEnd} onChange={(event) => setScheduleEnd(event.target.value)} /></label>
+      </div>
+      <label>durante esse horário<select value={scheduleAction} onChange={(event) => setScheduleAction(event.target.value as 'allow' | 'block')}><option value="block">Proteger</option><option value="allow">Permitir</option></select></label>
+      <button type="button" className="restore-button" onClick={addSchedule}>ADICIONAR HORÁRIO →</button>
+      {scheduleError && <p className="schedule-error" role="alert">{scheduleError}</p>}
+    </details>
     <div className="drawer-actions">
       <button className="button button--ink" disabled={saving || domains.length === 0 || (needsName && !name.trim())}>{saving ? 'SALVANDO…' : 'SALVAR REGRA'}</button>
       {defaults.length > 0 && <button type="button" className="restore-button" onClick={restoreDefaults}>RESTAURAR PADRÃO <small>{defaults.length} domínios</small></button>}

@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"testing"
+	"time"
 
 	"github.com/miekg/dns"
 	"github.com/pmarkun/teendns/internal/policy"
@@ -93,6 +94,31 @@ func TestResolveRecordsReasonAndGroupNameOnBlock(t *testing.T) {
 	event := sink.events[0]
 	if event.Reason != "Apostas usam dinheiro real" || event.MatchedDomain != "bet.test" || event.GroupName != "Apostas" {
 		t.Fatalf("unexpected event: %+v", event)
+	}
+}
+
+func TestResolveBlocksEveryDomainDuringProfilePause(t *testing.T) {
+	location, _ := time.LoadLocation("America/Sao_Paulo")
+	profile := policy.Profile{
+		ID:            "home",
+		TimeZone:      "America/Sao_Paulo",
+		DefaultAction: policy.ActionAllow,
+		Rules:         []policy.Rule{{Domain: "otherwise-allowed.test", Action: policy.ActionAllow}},
+		Groups:        []policy.RuleGroup{{ID: "all", Name: "Tudo", Action: policy.ActionAllow, Domains: []string{"otherwise-allowed.test"}, Schedules: []policy.ScheduledAction{{TimeWindow: policy.TimeWindow{ID: "allow", Label: "Sempre", Days: []int{1}, Start: "12:00", End: "13:00"}, Action: policy.ActionAllow}}}},
+		Pauses:        []policy.TimeWindow{{ID: "meal", Label: "Refeição", Days: []int{1}, Start: "12:00", End: "13:00"}},
+	}
+	sink := &recordingSink{}
+	server := NewServer("", nil, nil, "", 300, sink, nil)
+	server.now = func() time.Time { return time.Date(2026, time.September, 21, 12, 30, 0, 0, location) }
+	request := new(dns.Msg)
+	request.SetQuestion("otherwise-allowed.test.", dns.TypeA)
+
+	response := server.resolve(profile, request)
+	if response.Rcode != dns.RcodeNameError {
+		t.Fatalf("expected paused profile to return NXDOMAIN, got %s", dns.RcodeToString[response.Rcode])
+	}
+	if len(sink.events) != 1 || sink.events[0].Action != policy.ActionBlock || sink.events[0].Category != "global_pause" || sink.events[0].Reason != "Pausa geral" {
+		t.Fatalf("expected a pause event, got %+v", sink.events)
 	}
 }
 

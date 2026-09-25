@@ -23,6 +23,7 @@ import (
 
 func TestUpdateProfilePersistsAndActivatesImmediately(t *testing.T) {
 	cfg := testConfig()
+	cfg.Profiles[0].Groups = []policy.RuleGroup{{ID: "games", Name: "Jogos", Action: policy.ActionBlock, Domains: []string{"games.test"}}}
 	path := filepath.Join(t.TempDir(), "gateway.json")
 	if err := config.WriteAtomic(path, cfg, 0o600); err != nil {
 		t.Fatal(err)
@@ -36,7 +37,7 @@ func TestUpdateProfilePersistsAndActivatesImmediately(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	body := bytes.NewBufferString(`{"label":"Casa","default_action":"allow","rules":[{"domain":"bets.test","include_subdomains":true,"action":"block","category":"gambling","reason":"Acordo familiar"}]}`)
+	body := bytes.NewBufferString(`{"label":"Casa","default_action":"allow","rules":[{"domain":"bets.test","include_subdomains":true,"action":"block","category":"gambling","reason":"Acordo familiar"}],"groups":[{"id":"games","name":"Jogos","action":"block","domains":["games.test"],"schedules":[{"id":"after-school","label":"Depois da escola","days":[1,2,3,4,5],"start":"16:00","end":"17:00","action":"allow"}]}],"pauses":[{"id":"sleep","label":"Dormir","days":[0,1,2,3,4,5,6],"start":"22:00","end":"07:00"}]}`)
 	request := httptest.NewRequest(http.MethodPut, "/api/v1/profiles/home", body)
 	request.Header.Set("Authorization", "Bearer secret")
 	response := httptest.NewRecorder()
@@ -59,6 +60,13 @@ func TestUpdateProfilePersistsAndActivatesImmediately(t *testing.T) {
 	}
 	if persisted.Profiles[0].Version != 2 || len(persisted.Profiles[0].Rules) != 1 {
 		t.Fatalf("unexpected persisted profile: %+v", persisted.Profiles[0])
+	}
+	if len(persisted.Profiles[0].Pauses) != 1 || persisted.Profiles[0].Pauses[0].Label != "Dormir" || len(persisted.Profiles[0].Groups[0].Schedules) != 1 {
+		t.Fatalf("scheduled windows were not persisted: %+v", persisted.Profiles[0])
+	}
+	active, ok = manager.Profile("p-home.dns.teendns.test")
+	if !ok || len(active.Pauses) != 1 || active.Location == nil {
+		t.Fatalf("scheduled policy was not activated with its time zone: %+v", active)
 	}
 }
 
@@ -595,6 +603,87 @@ func TestSetHouseEmailsReplacesLoginAddresses(t *testing.T) {
 	server.Handler().ServeHTTP(missingResponse, missing)
 	if missingResponse.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for an unknown house, got %d", missingResponse.Code)
+	}
+}
+
+func TestHouseTimeZoneIsScopedAndActivatesForAllProfiles(t *testing.T) {
+	cfg := testConfig()
+	cfg.Houses = []config.House{{ID: "house-1", Name: "Casa", AdminTokenHash: tokenHash("house-secret")}}
+	cfg.Profiles[0].HouseID = "house-1"
+	cfg.Profiles = append(cfg.Profiles, policy.Profile{ID: "second", HouseID: "house-1", Label: "Outro", Hostname: "p-second.dns.teendns.test", DefaultAction: policy.ActionAllow, Version: 4, Rules: []policy.Rule{}})
+	path := filepath.Join(t.TempDir(), "gateway.json")
+	if err := config.WriteAtomic(path, cfg, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manager, _ := policy.NewManager(cfg.Profiles)
+	server, err := NewServer(path, cfg, manager, gateway.NewEventBuffer(), testPairing(), testMagicLinks(), testDigestPurger(), "dns.teendns.test", "operator-secret", testMailer())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	request := httptest.NewRequest(http.MethodPut, "/api/v1/profiles/home", bytes.NewBufferString(`{"label":"Casa","default_action":"allow","rules":[],"groups":[],"pauses":[],"time_zone":"America/Manaus"}`))
+	request.Header.Set("Authorization", "Bearer house-secret")
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", response.Code, response.Body.String())
+	}
+	profile, ok := manager.Profile("p-home.dns.teendns.test")
+	if !ok || profile.TimeZone != "America/Manaus" || profile.Location == nil || profile.Location.String() != "America/Manaus" {
+		t.Fatalf("house time zone was not activated for profile: %+v", profile)
+	}
+	second, ok := manager.Profile("p-second.dns.teendns.test")
+	if !ok || second.TimeZone != "America/Manaus" || second.Version != 5 {
+		t.Fatalf("house time zone was not activated and versioned for its other profiles: %+v", second)
+	}
+
+	getZone := httptest.NewRequest(http.MethodGet, "/api/v1/houses/house-1/timezone", nil)
+	getZone.Header.Set("Authorization", "Bearer house-secret")
+	zoneResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(zoneResponse, getZone)
+	var saved houseTimeZoneResponse
+	if err := json.NewDecoder(zoneResponse.Body).Decode(&saved); err != nil {
+		t.Fatal(err)
+	}
+	if zoneResponse.Code != http.StatusOK || saved.TimeZone != "America/Manaus" {
+		t.Fatalf("unexpected time zone response: %d %+v", zoneResponse.Code, saved)
+	}
+	persisted, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persisted.Houses[0].TimeZone != "America/Manaus" || persisted.Profiles[0].TimeZone != "America/Manaus" {
+		t.Fatalf("house time zone was not persisted/applied: %+v", persisted)
+	}
+
+	invalid := httptest.NewRequest(http.MethodPut, "/api/v1/profiles/home", bytes.NewBufferString(`{"label":"Casa","default_action":"allow","rules":[],"groups":[],"time_zone":"Mars/Olympus"}`))
+	invalid.Header.Set("Authorization", "Bearer house-secret")
+	invalidResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(invalidResponse, invalid)
+	if invalidResponse.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid time zone, got %d", invalidResponse.Code)
+	}
+
+	otherHouse := httptest.NewRequest(http.MethodGet, "/api/v1/houses/other-house/timezone", nil)
+	otherHouse.Header.Set("Authorization", "Bearer house-secret")
+	otherResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(otherResponse, otherHouse)
+	if otherResponse.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for an out-of-scope house, got %d", otherResponse.Code)
+	}
+}
+
+func TestMergeGroupsPreservesSchedulesWhenClientOmitsField(t *testing.T) {
+	existing := []policy.RuleGroup{{
+		ID: "games", Name: "Jogos", Action: policy.ActionBlock, Domains: []string{"games.test"},
+		Schedules: []policy.ScheduledAction{{TimeWindow: policy.TimeWindow{ID: "after-school", Label: "Depois da escola", Days: []int{1}, Start: "16:00", End: "18:00"}, Action: policy.ActionAllow}},
+	}}
+	merged, err := mergeGroups(existing, []policy.RuleGroup{{ID: "games", Name: "Jogos", Action: policy.ActionBlock, Domains: []string{"games.test"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(merged) != 1 || len(merged[0].Schedules) != 1 || merged[0].Schedules[0].ID != "after-school" {
+		t.Fatalf("expected omitted schedule to survive an older client update: %+v", merged)
 	}
 }
 
