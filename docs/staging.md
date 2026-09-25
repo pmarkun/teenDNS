@@ -182,8 +182,24 @@ Apple sai sem `ServerAddresses` e o instalador Windows recusa com `422`.
 
 O botão **JÁ INSTALOU? TESTAR** cria um desafio de pareamento e pergunta ao
 próprio DNS se algum aparelho do perfil respondeu
-(`GET /api/v1/pairing/challenges/{id}/outcome`, escopado por casa). Isso ainda
-não está publicado no staging — exigira uma promoção `main → production`.
+(`GET /api/v1/pairing/challenges/{id}/outcome`, escopado por casa). O fluxo foi
+implantado e validado no staging junto com a configuração por aparelho.
+
+## Horários e pausas
+
+O painel permite criar janelas semanais na gaveta **Horários** do perfil e,
+dentro da edição de cada grupo ou pacote, programar uma ação temporária de
+`Permitir` ou `Proteger`. Fora do intervalo, vale a ação normal do grupo.
+
+Pausas gerais bloqueiam as consultas DNS de todos os domínios do perfil durante
+o intervalo e prevalecem sobre as demais regras. Elas não encerram conexões já
+abertas nem evitam o uso de respostas em cache, VPN, DNS próprio ou acesso direto
+por IP.
+
+Os horários usam o fuso da casa (padrão `America/Sao_Paulo`) e são avaliados em
+cada consulta; não há tarefa de cron. Intervalos noturnos podem atravessar a
+meia-noite, com os dias indicando quando começam. Alterar o fuso da casa atualiza
+as rotinas de todos os perfis dela.
 
 ## Verificações do primeiro deploy
 

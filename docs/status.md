@@ -1,6 +1,6 @@
 # Estado da execução
 
-Atualizado em 24 de setembro de 2026. Branch: `codex/admin-web`.
+Atualizado em 24 de setembro de 2026. Branch: `main`.
 
 ## Marcos
 
@@ -52,6 +52,10 @@ Novos casos cobertos por testes:
 - `GET /api/v1/pairing/challenges/{id}/outcome` é escopado por casa: relatando
   `observed:false`, ou o perfil que observou, e `404` para desafio de fora da
   casa;
+- política agendada por grupo permite `Permitir` ou `Proteger` em janelas
+  semanais; pausas do perfil bloqueiam qualquer domínio e prevalecem sobre regras;
+  janelas noturnas, bordas exclusivas, sobreposição inválida e fuso IANA da casa
+  são validados e cobertos por testes.
 
 ### Integração em containers
 
@@ -133,6 +137,13 @@ Validação no navegador conectado:
   `390 × 844`, com 15 pacotes, sem rolagem horizontal ou mensagens de console;
 - pacote `Threads` foi ligado e desligado pela API do staging e o estado inicial
   desligado foi restaurado.
+- página standalone `/como` validada em navegador Chromium em `1440 × 900` e
+  `390 × 844`, sem rolagem horizontal; as sete seções têm IDs próprios e o
+  deep-link `/como#registro` posiciona a seção correta. O título mantém texto
+  normal no HTML e usa transformação tipográfica via CSS;
+- gaveta de horários do painel verificada em Chromium em desktop e celular com
+  API simulada: pausa geral adicionada e salva, agendamento por grupo acessível
+  na seção recolhida, sem rolagem horizontal e sem erros no console.
 
 ### Catálogo v1
 

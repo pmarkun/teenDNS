@@ -1,6 +1,9 @@
 package policy
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestDecideUsesMostSpecificRule(t *testing.T) {
 	profile := Profile{
@@ -138,5 +141,116 @@ func TestManagerReplacesProfilesAtomically(t *testing.T) {
 	profile, ok := manager.Profile("p-ana.dns.teendns.test")
 	if !ok || profile.Version != 2 || profile.DefaultAction != ActionBlock {
 		t.Fatalf("unexpected profile after replacement: %+v, %v", profile, ok)
+	}
+}
+
+func TestDecideAtAppliesScheduledGroupActionOnlyDuringWindow(t *testing.T) {
+	profile := Profile{
+		TimeZone:      "America/Sao_Paulo",
+		DefaultAction: ActionAllow,
+		Groups: []RuleGroup{{
+			ID: "games", Name: "Jogos", Action: ActionBlock, Domains: []string{"games.test"},
+			Schedules: []ScheduledAction{{TimeWindow: TimeWindow{ID: "after-school", Label: "Depois da escola", Days: []int{1}, Start: "16:00", End: "17:00"}, Action: ActionAllow}},
+		}},
+	}
+	location, _ := time.LoadLocation("America/Sao_Paulo")
+	cases := []struct {
+		name string
+		time time.Time
+		want Action
+	}{
+		{name: "inside", time: time.Date(2026, time.September, 21, 16, 0, 0, 0, location), want: ActionAllow},
+		{name: "end is exclusive", time: time.Date(2026, time.September, 21, 17, 0, 0, 0, location), want: ActionBlock},
+		{name: "other weekday", time: time.Date(2026, time.September, 22, 16, 30, 0, 0, location), want: ActionBlock},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			decision, err := DecideAt(profile, "games.test", test.time)
+			if err != nil || decision.Action != test.want {
+				t.Fatalf("unexpected decision: %+v, %v", decision, err)
+			}
+		})
+	}
+	blockSchedule := Profile{
+		TimeZone:      "America/Sao_Paulo",
+		DefaultAction: ActionAllow,
+		Groups: []RuleGroup{{
+			ID: "games", Name: "Jogos", Action: ActionAllow, Domains: []string{"games.test"},
+			Schedules: []ScheduledAction{{TimeWindow: TimeWindow{ID: "study", Label: "Estudos", Days: []int{2}, Start: "16:00", End: "17:00"}, Action: ActionBlock}},
+		}},
+	}
+	blocked, err := DecideAt(blockSchedule, "games.test", time.Date(2026, time.September, 22, 16, 30, 0, 0, location))
+	if err != nil || blocked.Action != ActionBlock || blocked.ScheduleLabel != "Estudos" {
+		t.Fatalf("scheduled block was not applied: %+v, %v", blocked, err)
+	}
+}
+
+func TestDecideAtSupportsOvernightPauseAndPauseOverridesRules(t *testing.T) {
+	profile := Profile{
+		TimeZone:      "America/Sao_Paulo",
+		DefaultAction: ActionAllow,
+		Rules:         []Rule{{Domain: "games.test", Action: ActionAllow}},
+		Pauses:        []TimeWindow{{ID: "sleep", Label: "Dormir", Days: []int{1}, Start: "22:00", End: "07:00"}},
+	}
+	location, _ := time.LoadLocation("America/Sao_Paulo")
+	cases := []struct {
+		name string
+		time time.Time
+		want Action
+	}{
+		{name: "start day late night", time: time.Date(2026, time.September, 21, 22, 0, 0, 0, location), want: ActionBlock},
+		{name: "following morning", time: time.Date(2026, time.September, 22, 6, 59, 0, 0, location), want: ActionBlock},
+		{name: "end is exclusive", time: time.Date(2026, time.September, 22, 7, 0, 0, 0, location), want: ActionAllow},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			decision, err := DecideAt(profile, "games.test", test.time)
+			if err != nil || decision.Action != test.want {
+				t.Fatalf("unexpected decision: %+v, %v", decision, err)
+			}
+			if test.want == ActionBlock && (decision.Category != "global_pause" || decision.ScheduleLabel != "Dormir") {
+				t.Fatalf("global pause not identified in decision: %+v", decision)
+			}
+		})
+	}
+}
+
+func TestStoreRejectsOverlappingGroupSchedules(t *testing.T) {
+	_, err := NewStore([]Profile{{
+		ID: "ana", Hostname: "ana.test", DefaultAction: ActionAllow,
+		Groups: []RuleGroup{{
+			ID: "games", Name: "Jogos", Action: ActionBlock, Domains: []string{"games.test"},
+			Schedules: []ScheduledAction{
+				{TimeWindow: TimeWindow{ID: "sleep", Label: "Dormir", Days: []int{1}, Start: "22:00", End: "06:00"}, Action: ActionBlock},
+				{TimeWindow: TimeWindow{ID: "morning", Label: "Manhã", Days: []int{2}, Start: "05:00", End: "08:00"}, Action: ActionAllow},
+			},
+		}},
+	}})
+	if err == nil {
+		t.Fatal("expected overlapping schedules to be rejected")
+	}
+}
+
+func TestStoreRejectsInvalidTimeWindows(t *testing.T) {
+	for _, window := range []TimeWindow{
+		{ID: "empty-days", Label: "Dormir", Start: "22:00", End: "07:00"},
+		{ID: "bad-time", Label: "Dormir", Days: []int{1}, Start: "25:00", End: "07:00"},
+		{ID: "zero-duration", Label: "Dormir", Days: []int{1}, Start: "07:00", End: "07:00"},
+		{ID: "bad-day", Label: "Dormir", Days: []int{7}, Start: "22:00", End: "07:00"},
+	} {
+		_, err := NewStore([]Profile{{
+			ID: "ana", Hostname: "ana.test", DefaultAction: ActionAllow,
+			Pauses: []TimeWindow{window},
+		}})
+		if err == nil {
+			t.Errorf("expected invalid window to fail validation: %+v", window)
+		}
+	}
+}
+
+func TestDecideAtRejectsInvalidTimeZoneWhenCalledWithoutStore(t *testing.T) {
+	_, err := DecideAt(Profile{TimeZone: "Mars/Olympus", DefaultAction: ActionAllow}, "example.test", time.Now())
+	if err == nil {
+		t.Fatal("expected an invalid profile time zone to return an error")
 	}
 }

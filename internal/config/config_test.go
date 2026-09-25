@@ -82,6 +82,77 @@ func TestLoadMigratesHousePrimaryEmailIntoEmails(t *testing.T) {
 	}
 }
 
+func TestLoadDefaultsAndAppliesHouseTimeZone(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gateway.json")
+	contents := []byte(`{
+  "listen": ":853",
+  "upstream": "127.0.0.1:5353",
+  "certificate": "server.pem",
+  "private_key": "server-key.pem",
+  "profiles": [
+    {"id":"ana","house_id":"house-1","hostname":"ana.test","default_action":"allow"},
+    {"id":"local","hostname":"local.test","default_action":"allow"}
+  ],
+  "houses": [{"id":"house-1","name":"Casa","admin_token_hash":"abc","time_zone":"America/Manaus"}]
+}`)
+	if err := os.WriteFile(path, contents, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Profiles[0].TimeZone != "America/Manaus" {
+		t.Fatalf("expected profile to inherit house time zone, got %q", cfg.Profiles[0].TimeZone)
+	}
+	if cfg.Profiles[1].TimeZone != policy.DefaultTimeZone {
+		t.Fatalf("expected unowned profile to use default time zone, got %q", cfg.Profiles[1].TimeZone)
+	}
+	if cfg.Houses[0].TimeZone != "America/Manaus" {
+		t.Fatalf("unexpected persisted house time zone: %q", cfg.Houses[0].TimeZone)
+	}
+}
+
+func TestLoadMigratesMissingHouseTimeZoneToDefault(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gateway.json")
+	contents := []byte(`{
+  "listen": ":853",
+  "upstream": "127.0.0.1:5353",
+  "certificate": "server.pem",
+  "private_key": "server-key.pem",
+  "profiles": [],
+  "houses": [{"id":"house-1","name":"Casa","admin_token_hash":"abc"}]
+}`)
+	if err := os.WriteFile(path, contents, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Houses[0].TimeZone != policy.DefaultTimeZone {
+		t.Fatalf("expected default house time zone, got %q", cfg.Houses[0].TimeZone)
+	}
+}
+
+func TestLoadRejectsInvalidHouseTimeZone(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gateway.json")
+	contents := []byte(`{
+  "listen": ":853",
+  "upstream": "127.0.0.1:5353",
+  "certificate": "server.pem",
+  "private_key": "server-key.pem",
+  "profiles": [],
+  "houses": [{"id":"house-1","name":"Casa","admin_token_hash":"abc","time_zone":"Mars/Olympus"}]
+}`)
+	if err := os.WriteFile(path, contents, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected invalid time zone to fail")
+	}
+}
+
 func TestLoadAppliesDefaultTTL(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "gateway.json")
 	contents := []byte(`{

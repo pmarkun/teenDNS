@@ -65,10 +65,16 @@ type accessScope struct {
 type accessContextKey struct{}
 
 type profileRequest struct {
-	Label         string             `json:"label"`
-	DefaultAction policy.Action      `json:"default_action"`
-	Rules         []policy.Rule      `json:"rules"`
-	Groups        []policy.RuleGroup `json:"groups"`
+	Label         string               `json:"label"`
+	DefaultAction policy.Action        `json:"default_action"`
+	Rules         []policy.Rule        `json:"rules"`
+	Groups        []policy.RuleGroup   `json:"groups"`
+	Pauses        *[]policy.TimeWindow `json:"pauses"`
+	TimeZone      *string              `json:"time_zone"`
+}
+
+type houseTimeZoneResponse struct {
+	TimeZone string `json:"time_zone"`
 }
 
 type registrationRequest struct {
@@ -185,14 +191,14 @@ type setupInfoResponse struct {
 }
 
 const (
-	defaultDNSPort        = "853"
-	defaultDNSTestDomain  = "example.com"
-	setupBatchFilename    = "configurar-teendns.bat"
-	setupRemoveFilename   = "remover-teendns.bat"
-	setupProfileFilename  = "teendns.mobileconfig"
-	setupWindowsMime      = "text/plain; charset=utf-8"
-	setupAppleMime        = "application/x-apple-aspen-config; charset=utf-8"
-	setupInfoMime         = "application/json; charset=utf-8"
+	defaultDNSPort       = "853"
+	defaultDNSTestDomain = "example.com"
+	setupBatchFilename   = "configurar-teendns.bat"
+	setupRemoveFilename  = "remover-teendns.bat"
+	setupProfileFilename = "teendns.mobileconfig"
+	setupWindowsMime     = "text/plain; charset=utf-8"
+	setupAppleMime       = "application/x-apple-aspen-config; charset=utf-8"
+	setupInfoMime        = "application/json; charset=utf-8"
 )
 
 func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, events *gateway.EventBuffer, pairings *pairing.Manager, magicLinks *magiclink.Manager, digest DigestPurger, hostnameSuffix, token string, mailer mail.Sender) (*Server, error) {
@@ -210,6 +216,12 @@ func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, e
 	}
 	if mailer == nil {
 		return nil, errors.New("mailer is required")
+	}
+	if err := config.ApplyHouseTimeZones(&cfg); err != nil {
+		return nil, err
+	}
+	if err := profiles.Replace(cfg.Profiles); err != nil {
+		return nil, err
 	}
 	if hostnameSuffix == "" {
 		hostnameSuffix = "dns.teendns.test"
@@ -266,6 +278,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/houses", s.registerHouse)
 	mux.HandleFunc("GET /api/v1/houses", s.authorize(s.listHouses))
 	mux.HandleFunc("DELETE /api/v1/houses/{id}", s.authorize(s.deleteHouse))
+	mux.HandleFunc("GET /api/v1/houses/{id}/timezone", s.authorize(s.houseTimeZone))
 	mux.HandleFunc("PUT /api/v1/houses/{id}/emails", s.authorize(s.setHouseEmails))
 	mux.HandleFunc("POST /api/v1/invitations", s.authorize(s.createInvitation))
 	mux.HandleFunc("GET /api/v1/waitlist", s.authorize(s.listWaitlist))
@@ -332,7 +345,7 @@ func (s *Server) registerHouse(writer http.ResponseWriter, request *http.Request
 		writeError(writer, http.StatusInternalServerError, err)
 		return
 	}
-	house := config.House{ID: houseIDToken[:12], Name: input.HouseName, AdminTokenHash: tokenHash(houseToken), Email: invitation.Email}
+	house := config.House{ID: houseIDToken[:12], Name: input.HouseName, AdminTokenHash: tokenHash(houseToken), TimeZone: policy.DefaultTimeZone, Email: invitation.Email}
 	if invitation.Email != "" {
 		house.Emails = []string{invitation.Email}
 	}
@@ -602,6 +615,29 @@ func (s *Server) adminGuard(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	writeError(writer, http.StatusUnauthorized, errors.New("chave de operador inválida"))
+}
+
+func (s *Server) houseTimeZone(writer http.ResponseWriter, request *http.Request) {
+	houseID := request.PathValue("id")
+	scope := requestScope(request)
+	s.mu.RLock()
+	index := slices.IndexFunc(s.config.Houses, func(house config.House) bool { return house.ID == houseID })
+	if index < 0 || (!scope.operator && scope.houseID != houseID) {
+		s.mu.RUnlock()
+		writeError(writer, http.StatusNotFound, errors.New("casa não encontrada"))
+		return
+	}
+	zone := s.config.Houses[index].TimeZone
+	if zone == "" {
+		zone = policy.DefaultTimeZone
+	}
+	s.mu.RUnlock()
+	if request.Method != http.MethodGet {
+		writer.Header().Set("Allow", "GET")
+		writeError(writer, http.StatusMethodNotAllowed, errors.New("method not allowed"))
+		return
+	}
+	writeJSON(writer, http.StatusOK, houseTimeZoneResponse{TimeZone: zone})
 }
 
 // setHouseEmails replaces the list of addresses allowed to log into a house's
@@ -886,6 +922,30 @@ func (s *Server) profileResource(writer http.ResponseWriter, request *http.Reque
 			}
 			profile.DefaultAction = input.DefaultAction
 			profile.Rules = append([]policy.Rule(nil), input.Rules...)
+			if input.TimeZone != nil {
+				zone := strings.TrimSpace(*input.TimeZone)
+				if _, err := time.LoadLocation(zone); err != nil {
+					return errors.New("fuso horário IANA inválido")
+				}
+				if profile.HouseID == "" {
+					return errors.New("perfil não pertence a uma casa")
+				}
+				houseIndex := slices.IndexFunc(cfg.Houses, func(house config.House) bool { return house.ID == profile.HouseID })
+				if houseIndex < 0 {
+					return errors.New("casa do perfil não encontrada")
+				}
+				if cfg.Houses[houseIndex].TimeZone != zone {
+					for index := range cfg.Profiles {
+						if cfg.Profiles[index].HouseID == profile.HouseID && cfg.Profiles[index].ID != profile.ID {
+							cfg.Profiles[index].Version++
+						}
+					}
+				}
+				cfg.Houses[houseIndex].TimeZone = zone
+			}
+			if input.Pauses != nil {
+				profile.Pauses = cloneTimeWindows(*input.Pauses)
+			}
 			if input.Groups != nil {
 				groups, err := mergeGroups(profile.Groups, input.Groups)
 				if err != nil {
@@ -1089,6 +1149,9 @@ func (s *Server) update(mutate func(*config.Config) error) error {
 	if err := mutate(&next); err != nil {
 		return err
 	}
+	if err := config.ApplyHouseTimeZones(&next); err != nil {
+		return err
+	}
 	if _, err := policy.NewStore(next.Profiles); err != nil {
 		return fmt.Errorf("validate profiles: %w", err)
 	}
@@ -1144,6 +1207,11 @@ func mergeGroups(existing, incoming []policy.RuleGroup) ([]policy.RuleGroup, err
 		if exists {
 			group.DomainSource = stored.DomainSource
 			group.DefaultDomains = append([]string(nil), stored.DefaultDomains...)
+			if group.Schedules == nil {
+				group.Schedules = cloneScheduledActions(stored.Schedules)
+			} else {
+				group.Schedules = cloneScheduledActions(group.Schedules)
+			}
 			if !group.Customized && len(group.DefaultDomains) > 0 {
 				group.Domains = append([]string(nil), group.DefaultDomains...)
 			}
@@ -1427,7 +1495,27 @@ func cloneConfig(cfg config.Config) config.Config {
 			result.Profiles[index].Groups[groupIndex] = group
 			result.Profiles[index].Groups[groupIndex].Domains = append([]string{}, group.Domains...)
 			result.Profiles[index].Groups[groupIndex].DefaultDomains = append([]string{}, group.DefaultDomains...)
+			result.Profiles[index].Groups[groupIndex].Schedules = cloneScheduledActions(group.Schedules)
 		}
+		result.Profiles[index].Pauses = cloneTimeWindows(profile.Pauses)
+	}
+	return result
+}
+
+func cloneTimeWindows(windows []policy.TimeWindow) []policy.TimeWindow {
+	result := make([]policy.TimeWindow, len(windows))
+	for index, window := range windows {
+		result[index] = window
+		result[index].Days = append([]int(nil), window.Days...)
+	}
+	return result
+}
+
+func cloneScheduledActions(schedules []policy.ScheduledAction) []policy.ScheduledAction {
+	result := make([]policy.ScheduledAction, len(schedules))
+	for index, schedule := range schedules {
+		result[index] = schedule
+		result[index].Days = append([]int(nil), schedule.Days...)
 	}
 	return result
 }

@@ -63,6 +63,7 @@ type Server struct {
 	maxTTL   uint32
 	events   EventSink
 	pairings PairingObserver
+	now      func() time.Time
 }
 
 type ProfileLookup interface {
@@ -78,6 +79,7 @@ func NewServer(address string, tlsConfig *tls.Config, profiles ProfileLookup, up
 		maxTTL:   maxTTL,
 		events:   events,
 		pairings: pairings,
+		now:      time.Now,
 	}
 }
 
@@ -114,9 +116,10 @@ func (s *Server) handleConnection(ctx context.Context, connection *tls.Conn) {
 		return
 	}
 
-	profile, ok := s.profiles.Profile(connection.ConnectionState().ServerName)
+	serverName := connection.ConnectionState().ServerName
+	profile, ok := s.profiles.Profile(serverName)
 	if !ok {
-		log.Printf("unknown profile endpoint %q", connection.ConnectionState().ServerName)
+		log.Printf("unknown profile endpoint %q", serverName)
 		return
 	}
 
@@ -127,6 +130,11 @@ func (s *Server) handleConnection(ctx context.Context, connection *tls.Conn) {
 			if !errors.Is(err, io.EOF) && !isTimeout(err) {
 				log.Printf("read DNS message for profile %q: %v", profile.ID, err)
 			}
+			return
+		}
+		profile, ok = s.profiles.Profile(serverName)
+		if !ok {
+			log.Printf("profile endpoint %q was revoked during a DNS connection", serverName)
 			return
 		}
 		response := s.resolve(profile, request)
@@ -146,10 +154,14 @@ func (s *Server) resolve(profile policy.Profile, request *dns.Msg) *dns.Msg {
 	}
 
 	question := request.Question[0]
+	now := time.Now()
+	if s.now != nil {
+		now = s.now()
+	}
 	if s.pairings != nil && s.pairings.Observe(profile.ID, question.Name) {
 		return blockedResponse(request)
 	}
-	decision, err := policy.Decide(profile, question.Name)
+	decision, err := policy.DecideAt(profile, question.Name, now)
 	if err != nil {
 		response := new(dns.Msg)
 		response.SetRcode(request, dns.RcodeFormatError)
@@ -157,7 +169,7 @@ func (s *Server) resolve(profile policy.Profile, request *dns.Msg) *dns.Msg {
 	}
 
 	event := Event{
-		Timestamp:     time.Now().UTC(),
+		Timestamp:     now.UTC(),
 		ProfileID:     profile.ID,
 		Query:         strings.ToLower(strings.TrimSuffix(question.Name, ".")),
 		QueryType:     question.Qtype,

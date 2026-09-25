@@ -1,5 +1,15 @@
 export type Action = 'allow' | 'block' | 'observe'
 
+export type TimeWindow = {
+  id: string
+  label: string
+  days: number[]
+  start: string
+  end: string
+}
+
+export type ScheduledAction = TimeWindow & { action: 'allow' | 'block' }
+
 export type Rule = {
   domain: string
   include_subdomains: boolean
@@ -18,6 +28,7 @@ export type RuleGroup = {
   default_domains?: string[]
   domain_source?: string
   customized?: boolean
+  schedules?: ScheduledAction[]
 }
 
 export type Profile = {
@@ -30,6 +41,7 @@ export type Profile = {
   version: number
   rules: Rule[]
   groups?: RuleGroup[]
+  pauses?: TimeWindow[]
 }
 
 export type CatalogPackage = {
@@ -194,6 +206,9 @@ export const api = {
       body: JSON.stringify({ emails }),
     })
   },
+  houseTimeZone(id: string) {
+    return request<{ time_zone: string }>(`/api/v1/houses/${id}/timezone`)
+  },
   async listWaitlist() {
     const result = await request<{ waitlist: WaitlistEntry[] }>('/api/v1/waitlist')
     return result.waitlist
@@ -223,7 +238,7 @@ export const api = {
       body: JSON.stringify({ label }),
     })
   },
-  updateProfile(profile: Profile) {
+  updateProfile(profile: Profile, timeZone?: string) {
     return request<Profile>(`/api/v1/profiles/${profile.id}`, {
       method: 'PUT',
       body: JSON.stringify({
@@ -231,6 +246,8 @@ export const api = {
         default_action: profile.default_action,
         rules: profile.rules,
         groups: profile.groups || [],
+        pauses: profile.pauses || [],
+        ...(timeZone ? { time_zone: timeZone } : {}),
       }),
     })
   },
