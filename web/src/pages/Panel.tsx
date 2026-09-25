@@ -673,6 +673,13 @@ function SetupDrawer({ profile, onClose }: { profile: Profile; onClose: () => vo
       </ol></details>
     </section>}
 
+    {info?.doh_url && <section className="setup-device">
+      <h3>CHROME · DNS SEGURO</h3>
+      <p>Em <b>Configurações → Privacidade e segurança → Segurança</b>, ative <b>Usar DNS seguro</b>, escolha o provedor personalizado e cole:</p>
+      <div className="setup-copy"><code>{info.doh_url}</code><button type="button" onClick={() => void navigator.clipboard.writeText(info.doh_url!)}>COPIAR</button></div>
+      <small>Chrome usa DNS-over-HTTPS (DoH). Este endereço HTTPS encaminha para o perfil acima; não use o hostname DoT nesta caixa.</small>
+    </section>}
+
     {info && <section className="setup-device">
       <h3>OUTROS (LINUX, ROTEADOR)</h3>
       <p>Configure o servidor DNS manualmente com os valores abaixo.{info.ip ? '' : ' Este DNS não expõe IP fixo público — use só o nome do servidor se o cliente suportar.'}</p>

@@ -76,7 +76,8 @@ type Decision struct {
 }
 
 type Store struct {
-	profiles map[string]Profile
+	profiles      map[string]Profile
+	profileLabels map[string]Profile
 }
 
 type Manager struct {
@@ -106,8 +107,15 @@ func (m *Manager) Profile(hostname string) (Profile, bool) {
 	return m.store.Load().Profile(hostname)
 }
 
+func (m *Manager) ProfileLabel(label string) (Profile, bool) {
+	return m.store.Load().ProfileLabel(label)
+}
+
 func NewStore(profiles []Profile) (*Store, error) {
-	store := &Store{profiles: make(map[string]Profile, len(profiles))}
+	store := &Store{
+		profiles:      make(map[string]Profile, len(profiles)),
+		profileLabels: make(map[string]Profile, len(profiles)),
+	}
 
 	for _, profile := range profiles {
 		if profile.Disabled {
@@ -122,6 +130,10 @@ func NewStore(profiles []Profile) (*Store, error) {
 		}
 		if _, exists := store.profiles[normalizedHostname]; exists {
 			return nil, fmt.Errorf("duplicate profile hostname %q", normalizedHostname)
+		}
+		profileLabel := strings.SplitN(normalizedHostname, ".", 2)[0]
+		if _, exists := store.profileLabels[profileLabel]; exists {
+			return nil, fmt.Errorf("duplicate profile endpoint label %q", profileLabel)
 		}
 		if !validAction(profile.DefaultAction) {
 			return nil, fmt.Errorf("profile %q has invalid default action %q", profile.ID, profile.DefaultAction)
@@ -197,6 +209,7 @@ func NewStore(profiles []Profile) (*Store, error) {
 			}
 		}
 		store.profiles[normalizedHostname] = profile
+		store.profileLabels[profileLabel] = profile
 	}
 
 	return store, nil
@@ -208,6 +221,15 @@ func (s *Store) Profile(hostname string) (Profile, bool) {
 		return Profile{}, false
 	}
 	profile, ok := s.profiles[normalized]
+	return profile, ok
+}
+
+func (s *Store) ProfileLabel(label string) (Profile, bool) {
+	normalized, err := normalizeName(label)
+	if err != nil || strings.Contains(normalized, ".") {
+		return Profile{}, false
+	}
+	profile, ok := s.profileLabels[normalized]
 	return profile, ok
 }
 
