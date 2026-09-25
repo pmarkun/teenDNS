@@ -52,6 +52,7 @@ type Server struct {
 	resolverIP     string
 	dnsPort        string
 	testDomain     string
+	dohBaseURL     string
 	token          string
 	catalogDir     string
 	mailer         mail.Sender
@@ -180,14 +181,15 @@ type pairingOutcomeResponse struct {
 	ProfileID string `json:"profile_id,omitempty"`
 }
 
-// setupInfoResponse carries the neutral values for the manual configuration
-// section: hostname, public resolver IP (may be empty in the lab), DoT port
-// and the domain used by scripts for their resolution test.
+// setupInfoResponse carries values for manual device configuration: hostname,
+// public resolver IP (may be empty in the lab), DoT port, the test domain and
+// an optional HTTPS DoH endpoint for browsers with a custom provider setting.
 type setupInfoResponse struct {
 	Hostname   string `json:"hostname"`
 	IP         string `json:"ip"`
 	Port       string `json:"port"`
 	TestDomain string `json:"test_domain"`
+	DoHURL     string `json:"doh_url,omitempty"`
 }
 
 const (
@@ -217,6 +219,10 @@ func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, e
 	if mailer == nil {
 		return nil, errors.New("mailer is required")
 	}
+	dohBaseURL, err := normalizeDoHBaseURL(os.Getenv("TEENDNS_DOH_BASE_URL"))
+	if err != nil {
+		return nil, err
+	}
 	if err := config.ApplyHouseTimeZones(&cfg); err != nil {
 		return nil, err
 	}
@@ -243,6 +249,7 @@ func NewServer(configPath string, cfg config.Config, profiles *policy.Manager, e
 		resolverIP:     resolverIP,
 		dnsPort:        environmentOrDefault("TEENDNS_DNS_PORT", defaultDNSPort),
 		testDomain:     environmentOrDefault("TEENDNS_DNS_TEST_DOMAIN", defaultDNSTestDomain),
+		dohBaseURL:     dohBaseURL,
 		token:          token,
 		catalogDir:     environmentOrDefault("TEENDNS_CATALOG_DIR", "catalog/v1"),
 		mailer:         mailer,
@@ -1007,6 +1014,7 @@ func (s *Server) serveSetupFile(writer http.ResponseWriter, profile policy.Profi
 		writer.Header().Set("Cache-Control", "no-store")
 		writeJSON(writer, http.StatusOK, setupInfoResponse{
 			Hostname: profile.Hostname, IP: s.resolverIP, Port: s.dnsPort, TestDomain: s.testDomain,
+			DoHURL: s.doHURL(profile.Hostname),
 		})
 		return
 	case "windows.bat":
@@ -1036,6 +1044,31 @@ func (s *Server) serveSetupFile(writer http.ResponseWriter, profile policy.Profi
 	default:
 		writeError(writer, http.StatusNotFound, errors.New("recurso de configuração não encontrado"))
 	}
+}
+
+func (s *Server) doHURL(profileHostname string) string {
+	if s.dohBaseURL == "" {
+		return ""
+	}
+	profileLabel := strings.SplitN(profileHostname, ".", 2)[0]
+	return s.dohBaseURL + "/" + url.PathEscape(profileLabel)
+}
+
+func normalizeDoHBaseURL(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", errors.New("TEENDNS_DOH_BASE_URL must be an HTTPS URL without credentials, query, or fragment")
+	}
+	if strings.TrimRight(parsed.Path, "/") != "/dns-query" {
+		return "", errors.New("TEENDNS_DOH_BASE_URL path must end with /dns-query")
+	}
+	parsed.Path = strings.TrimRight(parsed.Path, "/")
+	parsed.RawPath = ""
+	return parsed.String(), nil
 }
 
 func (s *Server) setupParams(profile policy.Profile) setup.Params {

@@ -18,9 +18,12 @@ painel web ──► API administrativa ──► estado da casa e políticas
 ```
 
 O gateway recebe conexões DNS-over-TLS (DoT). O hostname do perfil, enviado
-como SNI, seleciona a política daquela pessoa. Consultas permitidas seguem para
-o Unbound; as protegidas recebem resposta negativa. Alterações feitas pela API
-administrativa entram em vigor sem reiniciar o gateway.
+como SNI, seleciona a política daquela pessoa. Também recebe DNS-over-HTTPS
+(DoH, RFC 8484) por GET ou POST no caminho HTTPS
+`/dns-query/{rótulo-opaco-p-…}`; o Nginx encaminha esse caminho ao mesmo
+motor de política. Consultas permitidas seguem para o Unbound; as protegidas
+recebem resposta negativa. Alterações feitas pela API administrativa entram em
+vigor sem reiniciar o gateway.
 
 Cada casa tem um fuso IANA, inicialmente `America/Sao_Paulo`. Janelas semanais
 por grupo substituem sua ação normal enquanto estão ativas; pausas gerais do
@@ -43,6 +46,9 @@ privacidade estão detalhados em [Ameaças e limites](ameacas-e-limites.md).
   fuso da casa;
 - pausas gerais por perfil, com bloqueio DNS de todos os domínios durante cada
   janela;
+- DoH GET e POST para provedores personalizados de navegador, reutilizando o
+  hostname secreto do perfil como seletor no caminho (`TEENDNS_DOH_BASE_URL`)
+  e sem registrar esse caminho no access log do Nginx;
 - cache recursivo compartilhado sem compartilhar decisões entre perfis;
 - painel de regras com 15 pacotes prontos e ajustes por casa;
 - cadastro de casas por convite, com perfis e chave administrativa isolados;

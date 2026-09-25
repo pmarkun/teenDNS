@@ -3,12 +3,15 @@ package gateway
 import (
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"net"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -106,6 +109,101 @@ func (s *Server) Serve(ctx context.Context) error {
 		}
 		go s.handleConnection(ctx, connection.(*tls.Conn))
 	}
+}
+
+// DoHHandler serves RFC 8484 GET and POST requests. The opaque profile label
+// in the path selects the same policy used by DNS-over-TLS; reverse proxies
+// should disable access logging for this path because it contains that token.
+func (s *Server) DoHHandler() http.Handler {
+	return http.HandlerFunc(s.handleDoH)
+}
+
+func (s *Server) handleDoH(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	writer.Header().Set("X-Content-Type-Options", "nosniff")
+	if request.Method != http.MethodGet && request.Method != http.MethodPost {
+		writer.Header().Set("Allow", "GET, POST")
+		http.Error(writer, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	profileLabel := strings.TrimPrefix(request.URL.Path, "/dns-query/")
+	if profileLabel == request.URL.Path || profileLabel == "" || strings.Contains(profileLabel, "/") {
+		http.NotFound(writer, request)
+		return
+	}
+	profileLookup, ok := s.profiles.(interface {
+		ProfileLabel(string) (policy.Profile, bool)
+	})
+	if !ok {
+		http.NotFound(writer, request)
+		return
+	}
+	profile, ok := profileLookup.ProfileLabel(profileLabel)
+	if !ok {
+		http.NotFound(writer, request)
+		return
+	}
+
+	messageBytes, status := dohRequestMessage(writer, request)
+	if status != 0 {
+		return
+	}
+	dnsRequest := new(dns.Msg)
+	if err := dnsRequest.Unpack(messageBytes); err != nil {
+		http.Error(writer, "invalid DNS message", http.StatusBadRequest)
+		return
+	}
+
+	dnsResponse := s.resolve(profile, dnsRequest)
+	responseBytes, err := dnsResponse.Pack()
+	if err != nil {
+		http.Error(writer, "could not encode DNS response", http.StatusInternalServerError)
+		return
+	}
+	writer.Header().Set("Content-Type", "application/dns-message")
+	writer.WriteHeader(http.StatusOK)
+	_, _ = writer.Write(responseBytes)
+}
+
+func dohRequestMessage(writer http.ResponseWriter, request *http.Request) ([]byte, int) {
+	if request.Method == http.MethodGet {
+		encoded := request.URL.Query().Get("dns")
+		if encoded == "" {
+			http.Error(writer, "missing dns parameter", http.StatusBadRequest)
+			return nil, http.StatusBadRequest
+		}
+		message, err := base64.RawURLEncoding.DecodeString(encoded)
+		if err != nil {
+			message, err = base64.URLEncoding.DecodeString(encoded)
+		}
+		if err != nil {
+			http.Error(writer, "invalid dns parameter", http.StatusBadRequest)
+			return nil, http.StatusBadRequest
+		}
+		if len(message) > 65535 {
+			http.Error(writer, "DNS message is too large", http.StatusRequestEntityTooLarge)
+			return nil, http.StatusRequestEntityTooLarge
+		}
+		return message, 0
+	}
+
+	contentType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+	if err != nil || contentType != "application/dns-message" {
+		http.Error(writer, "Content-Type must be application/dns-message", http.StatusUnsupportedMediaType)
+		return nil, http.StatusUnsupportedMediaType
+	}
+	message, err := io.ReadAll(http.MaxBytesReader(writer, request.Body, 65535))
+	if err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			http.Error(writer, "DNS message is too large", http.StatusRequestEntityTooLarge)
+			return nil, http.StatusRequestEntityTooLarge
+		}
+		http.Error(writer, "could not read DNS message", http.StatusBadRequest)
+		return nil, http.StatusBadRequest
+	}
+	return message, 0
 }
 
 func (s *Server) handleConnection(ctx context.Context, connection *tls.Conn) {

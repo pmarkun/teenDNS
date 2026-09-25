@@ -109,9 +109,12 @@ func runGateway(arguments []string) {
 			log.Printf("reloaded %d profiles", len(updated.Profiles))
 		}
 	}()
+	adminHandler := http.NewServeMux()
+	adminHandler.Handle("/dns-query/", server.DoHHandler())
+	adminHandler.Handle("/", adminAPI.Handler())
 	httpServer := &http.Server{
 		Addr:              *adminListen,
-		Handler:           adminAPI.Handler(),
+		Handler:           adminHandler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {
