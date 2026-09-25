@@ -1,0 +1,118 @@
+:root {
+  --paper: #f2f0e9;
+  --ink: #0b0b0a;
+  --acid: #adff19;
+  --red: #f32b20;
+  --blue: #1748e8;
+  --muted: #66655f;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Arial Narrow', 'Barlow Condensed', 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.stage {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 44px 24px 64px;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 3px solid var(--ink);
+  padding-bottom: 10px;
+}
+
+.logo { font-size: 26px; font-weight: 900; letter-spacing: -0.5px; }
+.logo span { color: var(--red); }
+
+.tag {
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.kicker {
+  margin: 60px 0 0;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: var(--red);
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 14px 0 0;
+  font-size: clamp(34px, 6vw, 64px);
+  line-height: 0.95;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.facts {
+  display: flex;
+  gap: 28px;
+  margin: 36px 0 0;
+  border-top: 2px solid var(--ink);
+}
+
+.facts div { padding: 12px 0; border-bottom: 2px solid var(--ink); }
+
+.facts dt {
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+
+.facts dd {
+  margin: 4px 0 0;
+  font-size: 20px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.note {
+  margin: 36px 0 0;
+  max-width: 560px;
+  border-left: 5px solid var(--blue);
+  padding-left: 16px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.button {
+  display: inline-block;
+  margin-top: 32px;
+  padding: 12px 20px;
+  background: var(--acid);
+  border-bottom: 5px solid var(--ink);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 900;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.foot {
+  margin-top: 80px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+:focus-visible { outline: 4px solid var(--blue); outline-offset: 3px; }

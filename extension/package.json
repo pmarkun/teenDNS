@@ -1,0 +1,10 @@
+{
+  "name": "teendns-extension",
+  "private": true,
+  "version": "0.1.0",
+  "description": "teenDNS Chrome extension (MV3) — local mirror of the profile policy",
+  "type": "module",
+  "scripts": {
+    "test": "node --test decision.test.mjs"
+  }
+}
