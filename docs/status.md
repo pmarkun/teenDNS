@@ -1,6 +1,6 @@
 # Estado da execução
 
-Atualizado em 24 de setembro de 2026. Branch: `feature/chrome-doh`.
+Atualizado em 25 de setembro de 2026. Branch: `feature/chrome-extension`.
 
 ## Marcos
 
@@ -198,6 +198,34 @@ fixture: aproximadamente 0,01% CPU e 1,9 MiB RAM
 ```
 
 Esses números descrevem apenas esta máquina e o upstream local em cache. Não são estimativa de capacidade de produção ou latência da internet.
+
+## Extensão Chrome (MVP)
+
+Implementada em `extension/` com o endpoint correspondente no painel:
+
+- `GET /api/v1/extension/policy` devolve um snapshot de leitura escopado ao par
+  de pareamento (Bearer do desafio DNS): rótulo, `fingerprint`, ação padrão e
+  versão do perfil, fuse horário da casa, regras, grupos (com agendas) e pausas.
+  A resposta omite hostname/house id e o cabedal de catálogo
+  (`default_domains`, `domain_source`, `customized`) — coberto por testes;
+- `extension/decision.js` é a porta de `internal/policy.DecideAt` (sem `chrome.*`,
+  testável). Rodei `node --test extension/decision.test.mjs` com 23 casos que
+  espelham `internal/policy/policy_test.go`: padrão permitir, longest-match,
+  exato vs subdomínio, grupo `block` com subdomínio, agenda ativa alterando a
+  ação, pausa geral sobrepondo tudo, janela noturna com virada de dia e fusos
+  inválidos;
+- `extension/rules.js` constrói session rules DNR para ação padrão, regras e
+  grupos, preservando maior especificidade e ordem de empate do `DecideAt`;
+  ações `allow`/`observe` viram exceções à regra padrão/bloqueios menos
+  específicos. Regras exatas usam host ancorado. O redirect usa `extensionPath`
+  para `blocked.html`, que recupera categoria/motivo/grupo via service worker;
+- o service worker pareia sozinho (desafio + probe DNS + poll), renova o
+  pareamento quando a sessão de 1h expira, reaplica as regras a cada minuto
+  para honrar agendas/pausas e pinta o badge da aba (vermelho/bloqueado,
+  azul/observado, limão/liberado). Nenhum evento de bloqueio é reportado ao
+  painel (sem telemetria);
+- validei `go test`, `go vet`, `node --test` e `npm run lint && npm run build`
+  depois das mudanças — todos verdes.
 
 ## Problemas encontrados e resolvidos
 
